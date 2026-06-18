@@ -1,0 +1,23 @@
+{
+  "comment": "Replace /home/kk/code/robot_class/final_pro_xiaozhi_robot with the absolute project root, then delete this comment field.",
+
+  "hooks": {
+    "_comment_PostToolUse": "Optional: auto-sync handoff status -> location, regenerate INDEX",
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "_comment_matcher": "Watch writes to handoff/ADR; auto-maintain INDEX and active/archive routing",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/kk/code/robot_class/final_pro_xiaozhi_robot/.claude/scripts/sync-handoff-status.sh \"$CLAUDE_TOOL_INPUT_PATH\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  },
+
+  "_comment_permissions": "If you need strict mechanical isolation (planner cannot modify source code), use a PreToolUse hook (omitted here; see docs/concepts/isolation.md L5 upgrade path).",
+
+  "_comment_autoMemoryDirectory": "By default, Auto Memory lives in ~/.claude/projects/<repo>/memory/. This spec overrides via the agent definition using a relative path to ./.claude/memory/<role>/ so it can enter git."
+}
