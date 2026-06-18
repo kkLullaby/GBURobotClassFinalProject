@@ -11,10 +11,11 @@ Last compacted: 2026-06-19
 
 ## Active (status: pending|claimed|blocked)
 
-- [2026-06-19-idf-build-verify-h1a-012](active/2026-06-19-idf-build-verify-h1a-012.md) planner → executor: "H1a 本机 IDF 5.5.2 build 验证 (Otto Robot 板; 不 flash)" (**blocked** — codex sandbox 无 proxy → components-file.espressif.com 不通；planner main-loop 有 proxy，等用户裁决 unblock 路径)
+(none — Week 0 全部 done；H1b/P0 contract 由 planner 自起新 handoff)
 
 ## Recent done / archived (last 7 days)
 
+- [2026-06-19-idf-build-verify-h1a-012](archive/2026-06-19-idf-build-verify-h1a-012.md) planner → executor (done 2026-06-19, planner main-loop unblock per ADR-0003 II): "H1a 本机 IDF 5.5.2 build 验证 (OTTO_ROBOT 板; 不 flash)" — **xiaozhi.bin 3.5 MiB, 11% free**；3 处 unblock：codex 沙箱无 proxy + IDF submodules 用户漏 init + OTTO_ROBOT 板必须 append 3 个 CONFIG (HTTPD_WS_SUPPORT + CAMERA_OV2640/3660, 来自 `boards/otto-robot/config.json`)；7 min wall-clock 全冷 build；13 warning 全是上游
 - [2026-06-19-docs-alignment-009](archive/2026-06-19-docs-alignment-009.md) planner → executor (done 2026-06-19): "Week 0 ADR 落地后 6 处文档对齐" — 6 处 wording 落地（CLAUDE.md IDF 不入库 / shared/ submodule + Hermes 命令实测 / tech-stack Week 0 commit pin / roadmap §Week 3 + Day 16 OBSOLETE banner / README clone 含 submodule）；未 commit；H012 blocked 摘要在 What I Did
 
 - [2026-06-19-xinnan-docker-bringup-user-011](archive/2026-06-19-xinnan-docker-bringup-user-011.md) planner → **user** (done 2026-06-19, main-loop 代跑 per ADR-0003): "xinnan-tech minimal docker + DeepSeek LLM" — repo `a1973e0` 起在 `~/code/xinnan-tech/`, ports 8000/8003 LISTEN, DeepSeekLLM init ok; 额外发现：FunASR 需先下 893MB model.pt，否则 EOFError 崩溃循环；不发 auditor

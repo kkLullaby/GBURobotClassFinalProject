@@ -2,7 +2,7 @@
 id: 2026-06-19-idf-build-verify-h1a-012
 from: planner
 to: executor
-status: blocked
+status: done
 parent:
 created: 2026-06-19
 artifacts:
@@ -384,4 +384,129 @@ Call Stack (most recent call first):
 ```
 
 ## Open Questions for Auditor
-- 无；本 handoff 写明不发 auditor。当前需要用户/宿主环境提供到 Espressif component registry 的网络访问，或预先提供组件缓存后才能继续 H1a。
+- 无；本 handoff 写明不发 auditor。原 blocked 状态记录在上方"完整 stderr"段（codex sandbox 无 proxy → registry 不通），由 planner main-loop 接管并 unblock 跑通，详见下方 §"Unblock + Build SUCCESS (planner main-loop, 2026-06-19)"。
+
+---
+
+## Unblock + Build SUCCESS (planner main-loop, 2026-06-19)
+
+> ADR-0003 类型 II 代跑：codex sandbox 无 proxy + IDF submodules 未初始化，
+> planner 主会话有 `https_proxy=127.0.0.1:7897`、有 docker、有 IDF env，
+> 接管 H012 全程跑通。
+
+### Unblock 路径（按发现顺序）
+
+1. **真因 1 — codex sandbox 缺 proxy env**：原 stderr 说 "Cannot establish
+   a connection to ... `components-file.espressif.com`"。planner 本会话
+   `curl -x http://127.0.0.1:7897 https://components-file.espressif.com/components/78/esp-ml307.json`
+   立刻 HTTP 200；直裸连 TLS unexpected eof。codex 进程没继承 shell 的
+   `https_proxy`/`http_proxy`/`HTTPS_PROXY`/`HTTP_PROXY`。
+2. **真因 2 — `~/esp-idf-5.5.2/` 自身的 git submodule 未初始化**：用户
+   昨天装 IDF 时漏跑 `git submodule update --init --recursive`。第一次
+   set-target 报 "Missing esp-mqtt submodule. Please run `git submodule
+   update --init --recursive` in ESP-IDF directory to fix this"。
+3. **真因 2 修复中坑**：`git submodule update --init --recursive --depth=1`
+   会在 `lib_esp32c3_family` 处中断（fetch shallow + commit pin 非 branch
+   tip）→ 残留 `refs/heads/.invalid` ref + 临时 pack → 后续 init 全卡。
+   修复：手工 `rm -rf .git/modules/components/bt/controller/lib_esp32c3_family`
+   + `rm -rf components/bt/controller/lib_esp32c3_family` + 重 init 不带
+   `--depth=1`。最终全部 submodule 收回到 0 个 uninit。
+4. **真因 3 — OTTO_ROBOT 板必须 append 3 个 CONFIG**：第一次 build 跑到
+   2206/2212 个 obj 后 fail，`websocket_control_server.cc` 报 `httpd_ws_*`
+   API 未声明。`main/boards/otto-robot/config.json` 已写明
+   `sdkconfig_append: [CONFIG_HTTPD_WS_SUPPORT=y, CONFIG_CAMERA_OV2640=y,
+   CONFIG_CAMERA_OV3660=y]`，但 `idf.py menuconfig` 流程不自动应用——
+   这是 78/xiaozhi-esp32 上游 README 漏说的项目 fact。修复：手工 append
+   到 sdkconfig 末尾。
+
+### 流程实际跑（按 AC 顺序贴）
+
+```bash
+# IDF 5.5.2 submodules
+cd ~/esp-idf-5.5.2 && git submodule update --init --recursive  # ~15 min
+# 验：git submodule status | grep -c '^-'  →  0
+
+# 本仓库
+cd ~/code/robot_class/final_pro_xiaozhi_robot/esp/xiaozhi-esp32
+rm -rf build managed_components dependencies.lock sdkconfig sdkconfig.old
+source ~/esp-idf-5.5.2/export.sh
+
+idf.py set-target esp32s3      # 50s  (configure 47s, managed_components 全 pull)
+
+# 板子从默认 BREAD_COMPACT_WIFI 切到 OTTO_ROBOT（绕 menuconfig TUI；非交互）
+sed -i 's|^CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI=y|# CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI is not set|' sdkconfig
+sed -i 's|^# CONFIG_BOARD_TYPE_OTTO_ROBOT is not set|CONFIG_BOARD_TYPE_OTTO_ROBOT=y|' sdkconfig
+idf.py reconfigure             # 35s
+
+# 第一次 build → fail @ 2206/2212 (httpd_ws_*)
+time idf.py build              # 3m30s, exit 2
+
+# Append OTTO_ROBOT 必需 CONFIG (来自 main/boards/otto-robot/config.json)
+cat >> sdkconfig <<'EOF'
+
+# OTTO_ROBOT 板要求 (from main/boards/otto-robot/config.json sdkconfig_append)
+CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_CAMERA_OV2640=y
+CONFIG_CAMERA_OV3660=y
+EOF
+
+time idf.py build              # 3m32s, exit 0 ✅
+```
+
+### AC 验证
+
+| # | AC | 实测 |
+|---|---|---|
+| 1 | `idf.py --version` = `ESP-IDF v5.5.2` | ✅ `ESP-IDF v5.5.2` (set-target 后 dirty 标记消失) |
+| 2 | `idf.py set-target esp32s3` 成功 | ✅ Configuring done (47.0s) / Generating done (1.7s) |
+| 3 | `CONFIG_BOARD_TYPE_OTTO_ROBOT=y` 在 sdkconfig | ✅ |
+| 4 | `idf.py build` 跑完无 error，末尾 `Project build complete.` | ✅ EXIT=0；末尾 `Project build complete. To flash, run: idf.py flash` |
+| 5 | `build/*.bin` ≥1 个 ≥1 MB | ✅ `build/xiaozhi.bin` 3,688,320 B (3.5 MiB) |
+| 6 | ≤15 行 memo | ↓ 见下 |
+
+### Memo (AC #6)
+
+- **build 耗时**：第一次 3m30s (fail @ 2206/2212) + 第二次 3m32s (success)。
+  全冷 build 约 7 min wall-clock (有 `https_proxy=127.0.0.1:7897` 加速，
+  managed_components 一次拉齐 ~150 个组件)
+- **xiaozhi.bin**：3,688,320 B / app partition 4,128,768 B → free 11%
+  (`0x6b880` bytes)。OTA 双分区每个 4032 KB，spiffs assets 8 MB
+- **partition layout**：nvs 24K / otadata 8K / phy_init 4K /
+  **ota_0 app 4032K @ 0x20000** / **ota_1 app 4032K @ 0x410000** /
+  **assets spiffs 8M @ 0x800000**。flash 总占用 16 MB
+- **warning 数**：13 (主要 lwip `_IOR/_IOW` 跟 esp_video 重定义；driver/adc.h
+  legacy deprecated；txp666 emoji gif `int → unsigned` 转换)；全是
+  上游 warning，本任务不动
+- **sdkconfig 关键行**（grep `CONFIG_(BOARD_TYPE_OTTO_ROBOT|IDF_TARGET|
+  HTTPD_WS_SUPPORT|CAMERA_OV)`）：
+  ```
+  CONFIG_IDF_TARGET="esp32s3"
+  CONFIG_BOARD_TYPE_OTTO_ROBOT=y
+  CONFIG_HTTPD_WS_SUPPORT=y
+  CONFIG_CAMERA_OV2640=y
+  CONFIG_CAMERA_OV3660=y
+  ```
+
+### 给 planner 的 follow-up（必读，回灌 fact）
+
+1. **shared/global-commands.md §ESP32 段** 必须加：
+   - `cd ~/esp-idf-5.5.2 && git submodule update --init --recursive`
+     一次性 (~15 min)，新装 IDF 必跑
+   - OTTO_ROBOT 板 `idf.py menuconfig` 选完之后，**必须**手工
+     append 3 个 CONFIG (从 `main/boards/otto-robot/config.json` 的
+     `sdkconfig_append`)，否则 build 在 2206/2212 处崩
+2. **CLAUDE.md / ADR-0001 §pitfall #1** 要补一条："板子型号选对 ≠ build
+   能过 —— OTTO_ROBOT 板 menuconfig 之外还需 3 个 CONFIG"
+3. **README clone 步骤** 已经写了 `--recurse-submodules`（本仓的
+   submodule），但**没说 IDF 自己也要 init submodule**，是新装者会卡的坑
+4. **xiaozhi.bin 11% free** 是 baseline，给 M4 留 ~440 KB 加 MCP tool
+   代码的预算上限。M4 设计时要盯这个
+
+### 不动的边界
+
+- ESP32 实物未连，未 flash，未 monitor（H1b 任务，等 USB 线 + H011 server
+  联调）
+- 未 commit（gitignored：`build/`、`managed_components/`、`sdkconfig`、
+  `sdkconfig.old`、`dependencies.lock`）
+- 未改 `main/` 任何源码（包括 boards/otto-robot/ 反豁免区）
+- 未修改任何 ADR、handoff（除本 handoff 自身 done 收尾）
