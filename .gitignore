@@ -1,0 +1,17 @@
+# ESP-IDF SDK 不入库（开发者各自安装在 ~/esp-idf-5.5.2）
+esp/esp-idf/
+
+# 编译产物 / 缓存
+esp/xiaozhi-esp32/build/
+esp/xiaozhi-esp32/managed_components/
+esp/xiaozhi-esp32/dependencies.lock
+esp/xiaozhi-esp32/sdkconfig
+esp/xiaozhi-esp32/sdkconfig.old
+
+# 错误日志
+esp/xiaozhi-esp32/error.txt
+
+# 编辑器
+.vscode/
+.idea/
+*.swp

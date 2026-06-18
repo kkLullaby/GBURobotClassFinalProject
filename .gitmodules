@@ -1,0 +1,4 @@
+[submodule "esp/xiaozhi-esp32"]
+	path = esp/xiaozhi-esp32
+	url = https://github.com/78/xiaozhi-esp32.git
+	branch = main
