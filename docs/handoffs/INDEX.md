@@ -11,7 +11,7 @@ Last compacted: 2026-06-19
 
 ## Active (status: pending|claimed|blocked)
 
-(none — **Week 0 完全闭环** 🎉；M1 开工前 planner 先做 follow-up 回灌 (H014) + retro)
+- [2026-06-19-m1-spike-echo-tool-015](active/2026-06-19-m1-spike-echo-tool-015.md) planner → executor (pending, **可交 coding agent / sandbox-friendly**): "M1 spike: 复刻 78/mcp-pipe.py 形态 + echo tool round-trip + pytest mock 验" — 不依赖 8004 真实子服务、不连 ESP32、不集成 Hermes；纯 Python，3-4 小时
 
 ## Recent done / archived (last 7 days)
 
