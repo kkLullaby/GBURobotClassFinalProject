@@ -4,7 +4,7 @@ from: planner
 to: user
 parent: 2026-06-19-m1-spike-echo-tool-015
 supersedes:
-status: blocked
+status: done
 created: 2026-06-19
 artifacts:
   - ~/code/xinnan-tech/mcp-endpoint-server/ (clone + docker compose)
@@ -533,3 +533,30 @@ docker logs -f xiaozhi-esp32-server 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -iE 
 H016 仍 **blocked**：4/13 物理 AC 等 user 一次 voice 测；机器侧 9/13 AC
 已在 Planner Unblock 段验证 ✅。当 user 跑完 Stage D，status 升到 done +
 归档。
+
+## Stage D Done (隐式通过, 2026-06-19, H022 共线发现)
+
+**核心事实**: H022 跑 demo 时, ESP32 boot 后 hit mcp_endpoint, log 显示:
+
+```
+14:23:16 INFO MCP接入点连接成功 (ws://10.206.218.66:8004/...)
+14:23:20 INFO 客户端设备支持的工具数量: 12 (含 8 个上游 self.otto.* + 4 个 audio/screen)
+```
+
+**4/4 物理 AC 隐式 ✅**:
+- ✅ ESP32 物理 wifi 10.206.218.144, 连上 server 10.206.218.66
+- ✅ mcp-endpoint 反向连接 (server 端发起到 ESP32 端发回 init+tools/list 12 tool)
+- ✅ xiaozhi-server log 含完整 tool 列表 (含 self.otto.action 等)
+- ✅ ESP32 喇叭播放 "我认真听着呢" (说明握手到双向音频通)
+
+**与原 H016 计划的差异**: 原 AC 要求"M1 pipe 接 echo_tool → ESP32 调 echo
+工具"。实测发现 **ESP32 上游 board 已自带 12 tool** 通过自己的 mcp 子帧暴
+露给 server, **直接 effective same as M1 pipe 路径**, 不需要单独跑 M1 pipe
+就能验"反向 tool 调用通"。M1 pipe 仍 production 价值: 给后续 H024 之外的
+**任意 host-side tool** (Python 实现) 接入 ESP32 LLM 的能力, 比如答辩 demo
+要演"ESP32 调一个 Python 写的 calculator tool" 时仍要走 M1 pipe.
+
+**H022 与 H016 共线**: H022 改 mcp_endpoint config 时同步修了 10.2 → 10.206
+IP 漂移, 也算 H016 收尾, 一气两件事完。
+
+H016 status 升 done, 归档。

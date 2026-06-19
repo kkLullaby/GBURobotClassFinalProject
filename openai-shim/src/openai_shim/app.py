@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from fastapi import Depends, FastAPI, Header
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from .deepseek_backend import DeepSeekBackend
 from .echo_backend import EchoBackend, TextBackend
@@ -14,11 +14,15 @@ from .sse import chat_completion_sse
 
 
 class ChatMessage(BaseModel):
+    # 允许 tool_calls / tool_call_id / name / function_call 等 OpenAI 完整字段
+    # (H022 实测发现 xinnan-tech 会发 role=tool 的 message 带 tool_call_id)
+    model_config = ConfigDict(extra="allow")
     role: str
-    content: str
+    content: Optional[object] = None
 
 
 class ChatCompletionRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
     model: str
     messages: List[ChatMessage]
     stream: bool = False

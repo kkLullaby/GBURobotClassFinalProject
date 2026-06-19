@@ -6,24 +6,23 @@ import httpx
 from openai import AsyncOpenAI
 
 
-def _message_role(message: Any) -> str:
-    if isinstance(message, dict):
-        return str(message.get("role", ""))
-    return str(getattr(message, "role", ""))
-
-
-def _message_content(message: Any) -> str:
-    if isinstance(message, dict):
-        content = message.get("content", "")
-    else:
-        content = getattr(message, "content", "")
-    return content if isinstance(content, str) else ""
-
-
 def _message_payload(message: Any) -> dict:
+    """把 pydantic ChatMessage / dict 透传为完整 OpenAI message dict。
+
+    H022 实测发现: xinnan-tech server 在多轮 tool calling 后会发 role=tool 的
+    message, 必须保留 tool_call_id / tool_calls / name / function_call 等
+    OpenAI 兼容字段, 否则 DeepSeek 400. 用 .model_dump(exclude_none=True)
+    把 pydantic ChatMessage (extra=allow) 完整序列化, 字典则原样透传。
+    """
+    if isinstance(message, dict):
+        # 已经是 dict, 滤掉 None 字段
+        return {k: v for k, v in message.items() if v is not None}
+    if hasattr(message, "model_dump"):
+        return message.model_dump(exclude_none=True)
+    # 兜底: 至少 role+content
     return {
-        "role": _message_role(message),
-        "content": _message_content(message),
+        "role": str(getattr(message, "role", "")),
+        "content": getattr(message, "content", ""),
     }
 
 
