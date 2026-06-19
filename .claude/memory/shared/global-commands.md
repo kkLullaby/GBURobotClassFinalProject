@@ -112,13 +112,47 @@ grep -E 'websocket:|LLM' $COMPOSE_DIR/data/.config.yaml   # 看 ws URL + LLM 配
 **M1 后续要用的 8004 mcp-endpoint** 是独立子服务，minimal compose 不带；
 M1 开工时单独起，见 xinnan-tech `docs/mcp-endpoint-enable.md`。
 
-## Python 桥接服务
+## Python 桥接服务（M1 / M2 / M3）
+
+> ⚠️ **Python 解释器选择**（H015 unblock 踩坑, 2026-06-19）
+>
+> 用户默认 `python3` → `/home/kk/.platformio/penv/bin/python3` (PlatformIO venv，**没装项目 deps**)
+> `uv pip install --system` 默认装到 → `/home/kk/miniconda3/lib/python3.13/...`
+>
+> **本项目所有 Python 包（M1/M2/M3）一律用 conda 这个 python 跑**：
+> ```bash
+> alias pyx='/home/kk/miniconda3/bin/python'   # 建议加到 ~/.bashrc
+> ```
 
 ```bash
-# M1/M2/M3 Python 项目（待 Week 1+ 创建后回填具体路径）
-# pytest <path>     # 单测
-# python -m <pkg>   # 启动
+# 装包 / 跑包模板
+cd <package-dir>                                              # e.g. xiaozhi-mcp-adapter
+UV_CACHE_DIR=/tmp/uv-cache uv pip install --system -e '.[test]'
+pyx -m pytest -xvs tests/                                     # 跑测
+pyx -m <pkg.entrypoint>                                       # 启动
 ```
+
+### M1: xiaozhi-mcp-adapter（已有，H015 落地）
+
+```bash
+cd xiaozhi-mcp-adapter
+# 装 (一次性)
+UV_CACHE_DIR=/tmp/uv-cache uv pip install --system -e '.[test]'
+
+# 跑 spike 测试
+pyx -m pytest -xvs tests/                       # 1.17s 通过
+
+# 单跑 echo_tool (本地 stdio MCP server smoke)
+timeout 2 pyx -m xiaozhi_mcp_adapter.echo_tool < /dev/null
+
+# 真连 xinnan-tech 8004 mcp_endpoint（H016 done 后）
+MCP_ENDPOINT='ws://<host-ip>:8004/mcp_endpoint/mcp/?token=<...>' \
+  pyx -m xiaozhi_mcp_adapter.pipe
+```
+
+### M2 / M3 (待 H018+ 创建)
+
+骨架同 M1：`pyproject.toml` + `src/<pkg>/...` + `tests/` + 用 `pyx` 跑。
 
 ## Hermes（Week 0 实测后回填，2026-06-19）
 

@@ -11,7 +11,8 @@ Last compacted: 2026-06-19
 
 ## Active (status: pending|claimed|blocked)
 
-(none — H015 done; H016 user-led 待 planner 起草; H017+ Hermes 集成等 H016)
+- [2026-06-19-mcp-endpoint-server-bringup-016](active/2026-06-19-mcp-endpoint-server-bringup-016.md) planner → **user** (pending, ~25 min): "起 xinnan-tech mcp-endpoint-server (port 8004) + 配进 xiaozhi-server + 真 M1 pipe round-trip + ESP32 voice 调 echo tool" — M1 spike 升级真链路
+- [2026-06-19-m2-spike-openai-shim-018](active/2026-06-19-m2-spike-openai-shim-018.md) planner → executor (pending, **可交 coding agent / sandbox-friendly**): "M2 spike: openai-shim FastAPI + SSE + echo backend + pytest e2e" — ADR-0005 主线，~3-4h agent 工作
 
 ## Recent done / archived (last 7 days)
 
