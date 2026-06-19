@@ -1,0 +1,11 @@
+README.md
+pyproject.toml
+src/xiaozhi_mcp_adapter/__init__.py
+src/xiaozhi_mcp_adapter/echo_tool.py
+src/xiaozhi_mcp_adapter/pipe.py
+src/xiaozhi_mcp_adapter.egg-info/PKG-INFO
+src/xiaozhi_mcp_adapter.egg-info/SOURCES.txt
+src/xiaozhi_mcp_adapter.egg-info/dependency_links.txt
+src/xiaozhi_mcp_adapter.egg-info/requires.txt
+src/xiaozhi_mcp_adapter.egg-info/top_level.txt
+tests/test_pipe_e2e.py
