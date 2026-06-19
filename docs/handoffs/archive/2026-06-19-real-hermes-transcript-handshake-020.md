@@ -4,7 +4,7 @@ from: planner
 to: user
 parent: 2026-06-19-m2-hermes-fork-transcript-019
 supersedes:
-status: pending
+status: done
 created: 2026-06-19
 artifacts:
   - ~/.hermes/config.yaml (改：platforms.webhook.enabled=true)
@@ -213,3 +213,223 @@ tail -50 ~/.hermes/logs/gateway*.log 2>/dev/null
   代替（Week 1.5 任务）
 - 演示侧：deliver target 换成 telegram / discord 比 log 更有冲击力——可放
   H022 demo polish
+
+## Planner Unblock — Stage A–E (2026-06-19, main-loop per ADR-0003 II)
+
+User 让 planner 代跑 H020 + H016 (D 段 ESP32 物理不可代)。H020 全 5 段可
+main-loop 跑，开干。
+
+### Stage A — 启用 webhook platform ✅
+
+```
+$ cat >> ~/.hermes/config.yaml <<EOF
+platforms:
+  webhook:
+    enabled: true
+    extra:
+      host: "127.0.0.1"
+      port: 8644
+
+## Planner Unblock — Stage A–E (2026-06-19, main-loop per ADR-0003 II)
+
+User 让 planner 代跑 H020（H016 Stage D 物理段无 ESP32 不可代）。H020 全 5
+段 main-loop 可跑，开干。
+
+### Stage A — 启用 webhook platform ✅
+
+手工往 `~/.hermes/config.yaml` 追加 `platforms.webhook.enabled: true` +
+`host: 127.0.0.1` + `port: 8644`。`hermes webhook list` 不再报 "platform
+not enabled"，改报 "No dynamic webhook subscriptions"。
+
+### Stage B — gateway run + subscribe ✅
+
+**坑 1**：`--deliver-only` 跟 `--deliver log` 互斥。CLI 报：
+
+> Error: --deliver-only requires --deliver to be a real target (telegram,
+> discord, slack, ...) — not 'log'.
+
+放弃 `--deliver-only`，默认 deliver=log + agent 模式（每 trigger 烧一个
+小 prompt，约 100 token 可控）：
+
+```
+$ hermes webhook subscribe xiaozhi-transcript \
+    --prompt 'XiaoZhi user said: {user}. Assistant replied: {assistant}. \
+              Please briefly acknowledge in one sentence.' \
+    --description 'XiaoZhi robot transcript ingress (H020)'
+
+  Created webhook subscription: xiaozhi-transcript
+  URL:    http://127.0.0.1:8644/webhooks/xiaozhi-transcript
+  Secret: <43-char base64, prefix InNt...>   # auto-gen, 不贴全
+```
+
+启 gateway：
+
+```
+$ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+$ hermes gateway run &
+$ ss -tln | grep 8644
+LISTEN 0  128  127.0.0.1:8644  0.0.0.0:*
+
+(gateway log)
+INFO gateway.platforms.webhook: [webhook] Reloaded 1 dynamic route(s): xiaozhi-transcript
+INFO gateway.platforms.webhook: [webhook] Listening on 127.0.0.1:8644 — routes: xiaozhi-transcript
+INFO gateway.run: ✓ webhook connected
+INFO gateway.run: Gateway running with 1 platform(s)
+```
+
+启动 ~3s 完成（不是文档说的 5-30s）。两个启动 WARNING（stale systemd unit
++ no user allowlist）无害。
+
+### Stage C — uvicorn shim 真连 ✅
+
+```
+$ HERMES_TRANSCRIPT_URL='http://127.0.0.1:8644/webhooks/xiaozhi-transcript' \
+    pyx -m uvicorn openai_shim.app:app --port 8089
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8089
+```
+
+### Stage D — curl 触发 ⚠️ HMAC 401（预期失败）
+
+SSE 端正常：
+
+```
+$ curl -sN -X POST http://127.0.0.1:8089/v1/chat/completions \
+    -H "Authorization: Bearer fake" -H "Content-Type: application/json" \
+    -d '{"model":"echo","messages":[{"role":"user","content":"hi from H020"}],"stream":true}'
+
+data: {"id":"chatcmpl-79253138...","choices":[{"delta":{"content":"echoed: hi from H020"...,"finish_reason":"stop"...}],...}
+data: [DONE]
+```
+
+但 shim fork 失败：
+
+```
+INFO:     127.0.0.1:37938 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Hermes transcript fork failed: Client error '401 Unauthorized' for url
+  'http://127.0.0.1:8644/webhooks/xiaozhi-transcript'
+```
+
+gateway 那侧：
+
+```
+WARNING gateway.platforms.webhook: [webhook] Invalid signature for route xiaozhi-transcript
+INFO aiohttp.access: ... POST /webhooks/xiaozhi-transcript HTTP/1.1 401 199 ... python-httpx/0.28.1
+```
+
+✅ **正是 H020 §Stage F 预言 + Open Q 留的"HMAC 待补"**——shim 不签 HMAC，
+Hermes 401 拒。HermesBackend fire-and-forget 设计正常工作：SSE 主路径不
+被 fork 失败拖累。
+
+### Stage D.bis — 手算 HMAC 直送 webhook (绕开 shim 验路径) ✅
+
+为验 Hermes 那侧的解码 + render prompt + spawn agent 链路工作正常，
+手算 HMAC：
+
+```
+$ SECRET='<43 char from subscribe output>'
+$ PAYLOAD='{"user":"hi from H020","assistant":"echoed: hi from H020","model":"echo","session":"chatcmpl-manual-h020","timestamp_unix":1781873681}'
+$ SIG=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $2}')
+
+# 试 3 个 header name 找正确格式：
+$ curl -X POST .../webhooks/xiaozhi-transcript -H "X-Hermes-Signature: sha256=$SIG" -d "$PAYLOAD"
+< HTTP/1.1 401 Unauthorized                       ✗
+{"error": "Invalid signature"}
+
+$ curl -X POST .../webhooks/xiaozhi-transcript -H "X-Hub-Signature-256: sha256=$SIG" -d "$PAYLOAD"
+< HTTP/1.1 202 Accepted                           ✅
+{"status": "accepted", "delivery_id": "1781873719741"}
+
+$ curl -X POST .../webhooks/xiaozhi-transcript -H "X-Webhook-Signature: $SIG" -d "$PAYLOAD"
+< HTTP/1.1 202 Accepted                           ✅ (也接受, 见 Bonus #5)
+```
+
+**关键发现**：Hermes webhook HMAC header **是 GitHub 风格**
+`X-Hub-Signature-256: sha256=<hex>`，不是 `X-Hermes-Signature`。
+
+### Stage E — 验 Hermes 那侧渲染 prompt + spawn agent ✅
+
+`~/.hermes/logs/agent.log` 含 Stage D.bis 触发后的完整链路：
+
+```
+INFO gateway.platforms.webhook: [webhook] POST event=unknown
+  route=xiaozhi-transcript prompt_len=117 delivery=1781873719741
+INFO aiohttp.access: ... POST /webhooks/xiaozhi-transcript HTTP/1.1 202 271
+
+INFO gateway.run: inbound message: platform=webhook
+  user=xiaozhi-transcript chat=webhook:xiaozhi-transcript:1781873719741
+  msg='XiaoZhi user said: hi from H020. Assistant replied: echoed: hi from H020. Please'
+
+INFO [20260619_205520_be1c7197] agent.conversation_loop: conversation
+  turn: session=20260619_205520_be1c7197 model=deepseek-v4-pro
+  provider=deepseek platform=webhook history=0
+  msg='XiaoZhi user said: hi from H020. Assistant replied: echoed: hi from H020. Please...'
+```
+
+**ADR-0005 主线全验证**：
+- ✅ Hermes webhook 解 payload（5 字段全识别）
+- ✅ prompt template 渲染含 `echoed: hi from H020` 完整字串
+- ✅ Hermes spawn agent session `20260619_205520_be1c7197`
+- ✅ agent.conversation_loop 起来读到正确 msg
+
+agent 后续调 DeepSeek `APIConnectionError`（10s 内 3 次重试失败）——本机
+→ api.deepseek.com 网络问题（`unset *PROXY` 后直连失败；hermes 子进程
+继承父级 env，也丢了 proxy）。**不算 H020 失败**，是 H022 demo polish
+要处理的事。
+
+### AC verification 汇总
+
+| AC | Stage | 结果 |
+|---|---|---|
+| webhook platform enabled + 8644 LISTEN | A/B | ✅ |
+| hermes webhook subscribe xiaozhi-transcript | B | ✅ secret 43 char auto-gen |
+| `hermes gateway run` + listener up | B | ✅ ~3s 冷启 |
+| uvicorn shim with HERMES_TRANSCRIPT_URL | C | ✅ 1s |
+| curl SSE round-trip `echoed: hi from H020` | D | ✅ |
+| Hermes 收到 transcript POST | D | ⚠️ shim path 401 (HMAC 未签); D.bis 手算 HMAC 用 `X-Hub-Signature-256` 走通 202 |
+| Hermes 渲染 prompt template | E | ✅ `msg='XiaoZhi user said: hi from H020...'` |
+| Hermes spawn agent session | E | ✅ session `20260619_205520_be1c7197` |
+| Agent reads correct msg | E | ✅ history=0 + 完整 msg |
+| memo 贴回 | (本段) | ✅ |
+
+**机器侧全通**。
+
+### Bonus 观察 / 待回灌
+
+1. **Hermes webhook 强制 HMAC**：`--secret` 不可空。demo 答辩日要么：
+   (a) shim 加 HMAC 签名（**推荐 H021.bis**，~5 行：拼 body 前算
+   `hmac.new(secret.encode(), body_bytes, sha256).hexdigest()`，header
+   `X-Hub-Signature-256: sha256=<hex>`），(b) fork ~/.hermes 找配置关
+   HMAC，(c) curl 手算 HMAC 走旁路
+2. **Header 名是 GitHub 风格 `X-Hub-Signature-256`**——不是 H020 handoff
+   §F Open Q 假设的 `X-Hermes-Signature`；**回灌**到 H021.bis handoff
+3. **`--deliver-only` + `--deliver log` 互斥**：log 不算 real target；
+   要 0-token 必须用真 telegram/discord channel + `--deliver-only`；
+   demo 答辩用真 channel 视觉效果更好
+4. **DeepSeek connection error**：unset *PROXY 后 hermes 子进程没 proxy
+   连不出去。修法：写 `HTTPS_PROXY=http://127.0.0.1:7897` 进
+   `~/.hermes/.env`（hermes 子进程会读），父级 shim 仍 unset 走直连 LAN
+5. **两个 header name 都被接受 202**：`X-Hub-Signature-256` 跟
+   `X-Webhook-Signature` 都通——Hermes 校验函数有 fallback 路径；
+   **待 H022 batch review 时查 gateway 源码确认白名单**
+6. **agent loop 自动重试 3 次**：DeepSeek 失败后重试间隔指数退避
+   2.4s → 5.6s → 给 demo 答辩日预估 RTT 上限：~20s（fork-spawn-deepseek-retry）
+7. **`hermes gateway run` 两个启动 WARNING 无害**：stale systemd unit 跟
+   no user allowlist；后者意味 webhook user 不在 allowlist，但 webhook
+   平台允许；正式 demo 可加 allowlist 加固
+
+### Bitter lesson 候选
+
+- **环境 env 跟 hermes 子进程**：hermes 用 `subprocess` 拉起 agent，agent
+  进程继承 parent env。父级 `unset *PROXY` 跑 gateway → agent 也丢 proxy
+  → outbound 失败。**修法**：把 proxy 配进 `~/.hermes/.env`（它会传给 agent
+  独立于 parent），parent shell 仍 unset。**待回灌** shared/global-commands
+  §Hermes
+
+### Files touched
+
+- 改 `~/.hermes/config.yaml`（加 platforms.webhook）—**仓库外**
+- 临时建后又移除：webhook subscription `xiaozhi-transcript` (secret 不入库)
+- 新 `/tmp/h020-env.sh`（含 secret，不入库）
+- 改本 handoff (本段)
+- 待更：`docs/handoffs/INDEX.md` 同步 status / move to archive

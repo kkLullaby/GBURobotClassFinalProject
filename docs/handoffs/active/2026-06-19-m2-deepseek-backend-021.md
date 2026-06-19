@@ -4,7 +4,7 @@ from: planner
 to: executor
 parent: 2026-06-19-m2-hermes-fork-transcript-019
 supersedes:
-status: pending
+status: done
 created: 2026-06-19
 artifacts:
   - openai-shim/src/openai_shim/deepseek_backend.py (new)
@@ -292,3 +292,80 @@ git status --short
 - DeepSeek function-calling delta：H023 跟 M4 (ESP32 tools) 联调时一起做
 - session id 还在 hermes_backend 内生成 chatcmpl-<uuid>：H021 不解决；
   Week 1.5 "session 复用 ESP32 device_id" 任务时一起改
+
+## Executor's Reading
+### What I'll do
+- 在 H019 的 `openai-shim/` 基线上新增 `DeepSeekBackend`，用显式 env 扩展 `_build_backend()`，只用 fake-DeepSeek/fake-Hermes ASGITransport 测试 DeepSeek streaming、Hermes wrap、env matrix 和 API error propagation，同时保持 H018/H019 既有测试通过。
+
+### Assumptions made
+- [LOW] 当前 H018/H019 已归档且 `openai-shim/` 是 H021 的直接基线；工作树除 `? esp/xiaozhi-esp32` 外干净。
+- [LOW] fake-DeepSeek route 使用 `/chat/completions`，因为 `DeepSeekBackend(base_url="http://fake-deepseek")` 交给 OpenAI SDK 后会拼该路径。
+- [LOW] fake-DeepSeek SSE chunk 会填 `id/object/created/model/choices[0].index/delta`，复用 H018 的 OpenAI SDK 严格解析要求。
+- [LOW] DeepSeekBackend 内部 client 保存为 instance 属性，测试可以在注入 ASGITransport 时设置 `_platform = "Linux"`，沿用 H019 为避免 sandbox 线程池平台探测卡住的处理方式。
+- [LOW] `OPENAI_SHIM_BACKEND` 除 `deepseek` 外均按默认 echo 处理；H021 未要求 unknown backend 报错。
+- [MED] `DeepSeekBackend` 对 `openai.APIError` / `httpx.HTTPError` 不做捕获即可满足“上抛”：OpenAI SDK 会把 fake 500 转成 `openai.APIStatusError`，它是 `openai.APIError` 子类。
+
+## What I Did
+- Created `openai-shim/src/openai_shim/deepseek_backend.py` with `DeepSeekBackend(api_key, base_url, model_override, http_client)`, OpenAI SDK streaming, message dict conversion, and delta-content yielding. It does not catch `openai.APIError` or `httpx.HTTPError`, so main-path LLM errors propagate.
+- Updated `openai-shim/src/openai_shim/app.py` backend selection with `OPENAI_SHIM_BACKEND`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, and orthogonal `HERMES_TRANSCRIPT_URL` wrapping. Default env remains `EchoBackend`; `HERMES_TRANSCRIPT_URL` alone still wraps echo.
+- Added `openai-shim/tests/test_deepseek_backend.py` covering fake-DeepSeek SSE chunk yield, HermesBackend wrapping DeepSeek and forking the real assistant text, `_build_backend()` env matrix, and fake-DeepSeek 500 propagating as `openai.APIError`.
+- Updated `openai-shim/README.md` with a 23-line `H021 DeepSeek Backend` section: env matrix, placeholder-key uvicorn command, curl example, and H022 end-to-end note.
+- Confirmed no diff in `openai-shim/src/openai_shim/echo_backend.py`, `openai-shim/src/openai_shim/hermes_backend.py`, `openai-shim/src/openai_shim/sse.py`, `openai-shim/tests/test_chat_completions.py`, or `openai-shim/tests/test_hermes_fork.py`.
+- Did not call the real DeepSeek API, did not run Hermes CLI, did not touch `~/.hermes/`, H016 docker, ESP32, mcp-endpoint-server, OpenAI/Anthropic/Ollama backend, or function-calling code.
+
+Smoke command:
+
+```bash
+/home/kk/miniconda3/bin/python -c "from openai_shim.deepseek_backend import DeepSeekBackend; print(DeepSeekBackend)"
+```
+
+Smoke output:
+
+```text
+<class 'openai_shim.deepseek_backend.DeepSeekBackend'>
+```
+
+Test command:
+
+```bash
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+unset HERMES_TRANSCRIPT_URL OPENAI_SHIM_BACKEND DEEPSEEK_API_KEY DEEPSEEK_BASE_URL
+/home/kk/miniconda3/bin/python -m pytest -xvs tests/
+```
+
+Output:
+
+```text
+============================= test session starts ==============================
+platform linux -- Python 3.13.9, pytest-9.1.0, pluggy-1.5.0 -- /home/kk/miniconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /home/kk/code/robot_class/final_pro_xiaozhi_robot/openai-shim
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.12.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 9 items
+tests/test_chat_completions.py::test_streaming_echo_roundtrip PASSED
+tests/test_chat_completions.py::test_non_streaming_returns_503 PASSED
+tests/test_deepseek_backend.py::test_deepseek_backend_yields_real_stream_chunks PASSED
+tests/test_deepseek_backend.py::test_hermes_wraps_deepseek_forks_real_assistant_text PASSED
+tests/test_deepseek_backend.py::test_build_backend_with_env_matrix PASSED
+tests/test_deepseek_backend.py::test_deepseek_api_error_propagates PASSED
+tests/test_hermes_fork.py::test_transcript_posted_when_hermes_url_set PASSED
+tests/test_hermes_fork.py::test_sse_still_works_when_hermes_returns_500 PASSED
+tests/test_hermes_fork.py::test_no_fork_when_hermes_url_unset PASSED
+============================== 9 passed in 3.27s ===============================
+```
+
+`git status --short`:
+
+```text
+ M docs/handoffs/active/2026-06-19-m2-deepseek-backend-021.md
+ ? esp/xiaozhi-esp32
+ M openai-shim/README.md
+ M openai-shim/src/openai_shim/app.py
+?? openai-shim/src/openai_shim/deepseek_backend.py
+?? openai-shim/tests/test_deepseek_backend.py
+```
+
+## Open Questions for Auditor
+- None. H021 explicitly says no auditor handoff; M2 batch review is deferred.

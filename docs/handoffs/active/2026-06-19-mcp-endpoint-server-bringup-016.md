@@ -461,3 +461,75 @@ Question 给 planner 回灌 ADR-0005。
 
 - **环境 env**：`unset` 时机要在 *launch 子进程之前*；本仓库的 spike scripts
   以后默认得在 startup banner 里 echo proxy state，否则同样的卡 30s 重现
+
+## Stage D Ready-to-Run (planner pre-flight 2026-06-19, 6h after Stage A/B/C)
+
+User 在 H020 之后请 planner 把 D 段也代跑。planner 没 ESP32 物理，做不了
+voice 测；但机器侧基础设施 6 小时后仍全部 LIVE：
+
+```
+$ docker ps --format '{{.Names}} {{.Status}}'
+mcp-endpoint-server  Up 6 hours
+xiaozhi-esp32-server Up 6 hours
+
+$ ss -tln | grep -E ':800[034]'
+LISTEN  0.0.0.0:8000  (xiaozhi WS)
+LISTEN  0.0.0.0:8003  (xiaozhi OTA)
+LISTEN  0.0.0.0:8004  (mcp-endpoint)
+
+$ grep mcp_endpoint .../data/.config.yaml
+mcp_endpoint: ws://10.2.244.38:8004/mcp_endpoint/mcp/?token=<TOKEN>
+
+$ cat /tmp/h016-env.sh
+HOST_IP=10.2.244.38
+KEY=<32 char>
+TOKEN=<46 char, 含 %3D>
+```
+
+### User 跑 Stage D 时 1-paste 起点
+
+```bash
+# tab 1: M1 pipe（**必须** unset proxy — H016 教训）
+cd ~/code/robot_class/final_pro_xiaozhi_robot/xiaozhi-mcp-adapter
+source /tmp/h016-env.sh
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+MCP_ENDPOINT="ws://$HOST_IP:8004/mcp_endpoint/mcp/?token=$TOKEN" \
+  PYTHONUNBUFFERED=1 /home/kk/miniconda3/bin/python -u -m xiaozhi_mcp_adapter.pipe
+
+# 期望立刻看到：
+# INFO ... starting child process: ... echo_tool
+# INFO ... connected to MCP endpoint: ws://10.2.244.38:...
+
+# tab 2: xiaozhi-server 实时观测 LLM 是否选 echo tool
+docker logs -f xiaozhi-esp32-server 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -iE 'mcp|tool|echo|tools/'
+
+# ESP32 物理端
+# 1. 确认 wifi 已切到当前主机所在 LAN 段 (10.2.0.0/16 或同样能路由到 10.2.244.38)
+# 2. 上电，等 boot 完成（看 LCD 或喇叭提示）
+# 3. 对它说："调用 echo 工具，参数 hi"
+#    或："用 echo 工具回声 hi"
+#    （明示句让 LLM 走 tool 路径；中文模糊指令 LLM 倾向不调）
+#
+# 期望:
+# tab 1 logs:  → tools/call echo {"text":"hi"}
+#              ← {"echoed: hi"}
+# tab 2 logs:  执行工具: echo, 参数: {'text':'hi'}
+# 喇叭:        LLM 念 "echoed: hi" 或解释 "回声结果是 hi"
+```
+
+### 跑完贴什么
+
+跑通后在 H016 handoff 再 append 一段 "Stage D done (user, YYYY-MM-DD)"：
+- ESP32 实际 wifi 段 + IP
+- 你实际说的话 + LLM 是否选了 echo tool
+- tab 1 pipe logs 的 tools/call 行（≤5 行）
+- 主观感受：tool round-trip 加多少延迟 (vs H1b baseline 4-6s 纯对话)
+- 改 status 仍 done (Stage D 是 9/13 → 13/13 AC 补完)
+
+跑不通时跑一遍 Recovery 表 / Open Q（LLM 不主动调 tool 是预期）。
+
+### Status
+
+H016 仍 **blocked**：4/13 物理 AC 等 user 一次 voice 测；机器侧 9/13 AC
+已在 Planner Unblock 段验证 ✅。当 user 跑完 Stage D，status 升到 done +
+归档。
