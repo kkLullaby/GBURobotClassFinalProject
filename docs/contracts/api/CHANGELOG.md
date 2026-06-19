@@ -14,3 +14,8 @@
   回灌)。§4.2.bis 记 server 在 hello 后自动发 MCP `initialize`（含 `vision`
   capability + JWT），§8.bis 记 baseline 端到端实测数据（MAC / IP / 串口
   ACM 不是 USB / RTT 等）。非 breaking change，v1 自然延伸。
+
+- **v1/esp32-mcp-tools.md** new draft (H023 inventory spike done)。锁 M4
+  新增 2 tool 契约：`self.otto.show_emoji(name)` + `self.otto.show_text
+  (text, kind)`。`gesture` DROP（上游 `self.otto.action` 已覆盖 26 种动作），
+  `show_qr` DROP for M4 demo（用 show_text "扫码: <url>" 轻方案）。M4 真实现 H024+。

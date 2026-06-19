@@ -4,7 +4,7 @@ from: planner
 to: executor
 parent: 2026-06-19-mcp-endpoint-server-bringup-016
 supersedes:
-status: pending
+status: done
 created: 2026-06-19
 artifacts:
   - docs/research-notes/m4-otto-tools-inventory.md (new)
@@ -228,3 +228,100 @@ git status --short
 - 4 tool 一次性加完 vs 分批：roadmap 1.5 day 估算；spike 后给真 LOC
 - emoji set 用上游 enum 还是开放参数？前者安全后者灵活
 - M4 完成后 demo 可以演的"动作链"长什么样 (Week 2 验收)
+
+## Executor's Reading
+### What I'll do
+- 先按 Context Pointers 盘点 otto-robot 现有 MCP tool、emoji/movement/display/QR 接口，再只创建 handoff 指定的 3 份中文规划/契约文档；但本轮在上下文读取阶段已有命令报错，按纪律停止。
+
+### Assumptions made
+- [LOW] `docs/designs/` 与 `docs/contracts/` 没有 INDEX 文件时，本应继续按 handoff 的显式路径读取具体文档。
+- [MED] 本 handoff 显式列出的 3 个文档产物可作为对 `docs/designs/` 和 `docs/contracts/` 的写入授权；但由于读上下文阶段报错，尚未实际写入。
+
+## What I Did
+- 已读启动纪律文件：
+  - `.claude/agents/executor.md`
+  - `CLAUDE.md`
+  - `.claude/rules/handoff-protocol.md`
+  - `docs/adr/0003-executor-runs-in-main-loop.md`
+- 已读 `docs/handoffs/INDEX.md`、`docs/adr/INDEX.md`、当前 handoff、`docs/roadmap.md`、`docs/designs/active/m4-bin-size-budget.md`、`docs/contracts/api/v1/esp32-to-server-handshake.md`、`.claude/memory/shared/global-commands.md`。
+- 在按“读目录前先读 INDEX.md”检查上下文时，以下两个命令报错。按用户纪律“任何步骤报错立即 status: blocked + 完整 stderr 贴 What I Did”，本 handoff 已停止，未创建 3 份目标文档。
+
+```text
+sed: can't read docs/designs/INDEX.md: No such file or directory
+sed: can't read docs/contracts/INDEX.md: No such file or directory
+```
+
+## Open Questions for Planner / User
+- `docs/designs/` 与 `docs/contracts/` 当前没有 INDEX 文件。请确认本 handoff 是否允许 executor 跳过这两个目录 INDEX，直接按 Context Pointers 和目标路径继续写 3 份文档。
+
+## Planner Unblock (2026-06-19, main-loop per ADR-0003 II)
+
+Codex 把"读目录前先读 INDEX"纪律解释成"必须先看 INDEX 才能写新 doc"，
+卡在 `docs/designs/` / `docs/contracts/` 没 INDEX 上 status: blocked。这是
+**纪律过严**——CLAUDE.md 那条是 "读**目录里所有文件**之前先读 INDEX 找
+入口"，不是 "目录无 INDEX 不许写新 doc"。
+
+Planner main-loop 直接做了 inventory + 写 3 份 doc。grep 结果列在
+`docs/research-notes/m4-otto-tools-inventory.md` §4 cite。
+
+### 3 份 doc 写完
+
+```
+?? docs/research-notes/m4-otto-tools-inventory.md   (177 行)
+?? docs/designs/active/m4-tools-plan.md             (137 行)
+?? docs/contracts/api/v1/esp32-mcp-tools.md         (75 行)
+M  docs/contracts/api/CHANGELOG.md                  (加 1 条 H023 entry)
+```
+
+### 关键发现 (待 M4 实现 H024 时直接用)
+
+1. **上游已有 8 tool** 全是 motion/sensing/config，**没暴露任何 display 控制**
+   → 我们计划新加的 show_emoji / show_text 是真填空白，不撞重
+2. **`self.otto.action` 已覆盖 26 个预设动作** (walk/jump/wave/shy/magic_circle/...)
+   → `gesture` tool 是**冗余**，DROP；改用 Hermes system prompt 教 LLM 映射
+3. **`Display::SetEmotion` / `ShowNotification` / `SetChatMessage` 都已虚函数化**
+   ([display.h:34-37](../../esp/xiaozhi-esp32/main/display/display.h)) +
+   application.cc 已在用 → 新 tool 只是 wrap，**~20-25 LOC each**
+4. **emoji 21 个名字现成注册**
+   ([emoji_collection.cc:55-75](../../esp/xiaozhi-esp32/main/display/lvgl_display/emoji_collection.cc))
+   → tool 用 string + description 列名即可
+5. **esp_qrcode 未 link** + 渲染 ~350 KB + 余量仅 440 KB → DROP for demo；
+   show_text 加 "扫码: <url>" 轻方案替代
+
+### M4 真实现 (H024) 估算
+
+- show_emoji: ~20 LOC，~30 min
+- show_text: ~25 LOC，~45 min
+- 合并烧 1 次 (build + flash ~15 min) + 端到端测 (~30 min)
+- **总: ~2 小时**（roadmap 给 1.5 day, 缩 87%）
+
+### AC verification
+
+| AC | 结果 |
+|---|---|
+| `docs/research-notes/m4-otto-tools-inventory.md` ≤ 200 行 | ✅ 177 行 |
+| 含 §1 (8 tool 表) + §2 (4 plan tool vs 已有) + §3 (verdict) + §4 (cite) | ✅ 全 |
+| `docs/designs/active/m4-tools-plan.md` ≤ 150 行 | ✅ 137 行 |
+| frontmatter + §1-5 + signature/inputs/returns/LOC/risk/NLU 示例 | ✅ 全 |
+| `docs/contracts/api/v1/esp32-mcp-tools.md` ≤ 100 行 | ✅ 75 行 |
+| §1 命名 + §2 表 + versioning rules | ✅ 全 |
+| 不写 C++ / Python | ✅ |
+| 不改 INDEX (planner 维护) | ❌ INDEX 后改 |
+| 不起 ADR | ✅ |
+
+### Files touched (final)
+
+```
+?? docs/research-notes/m4-otto-tools-inventory.md
+?? docs/designs/active/m4-tools-plan.md
+?? docs/contracts/api/v1/esp32-mcp-tools.md
+M  docs/contracts/api/CHANGELOG.md
+M  docs/handoffs/active/2026-06-19-m4-tools-inventory-spike-023.md (this)
+M  docs/handoffs/INDEX.md (后)
+```
+
+### Bitter lesson
+
+**"读目录前先读 INDEX"** 这条 CLAUDE.md 规则需要补一条 sub-clause：
+"目录里**没有** INDEX 时直接按 handoff 的具体 path 读/写即可，不要因为
+INDEX 不存在就 blocked"。**待回灌** CLAUDE.md。
