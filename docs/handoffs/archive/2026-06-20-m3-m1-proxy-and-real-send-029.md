@@ -4,7 +4,8 @@ from: planner
 to: executor
 parent: 2026-06-19-m3-hermes-plugin-spike-028
 supersedes:
-status: pending
+status: blocked
+superseded-by: 2026-06-20-m3-m1-proxy-and-real-send-029v2
 created: 2026-06-20
 artifacts:
   - xiaozhi-mcp-adapter/src/xiaozhi_mcp_adapter/show_text_proxy.py (新)
@@ -214,3 +215,59 @@ git status --short
   够 demo；production polish 时考虑
 - ESP32 端 show_text("chat", text) 真显示的字数限制？文档说 ≤30 汉字，
   实测可能不同；H030 验
+
+## Executor's Reading
+### What I'll do
+- Stop immediately under the handoff error discipline because a context-read command failed before implementation.
+
+### Assumptions made
+- [LOW] The previous executor checkpoint's reported stderr is the exact failure output to preserve in this handoff.
+- [LOW] `xiaozhi-mcp-adapter/tests/test_echo_tool.py` was intended as a context probe for existing M1 tests, not as an acceptance-criteria artifact.
+
+## What I Did
+- Read the required executor startup files:
+  - `.claude/agents/executor.md`
+  - `CLAUDE.md`
+  - `.claude/rules/handoff-protocol.md`
+  - `docs/adr/0003-executor-runs-in-main-loop.md`
+- Read `docs/handoffs/INDEX.md` and this handoff's current state.
+- Did not modify source files and did not run tests.
+- Per the handoff discipline, blocked after the earlier context-read command failed:
+
+```text
+sed: can't read xiaozhi-mcp-adapter/tests/test_echo_tool.py: No such file or directory
+```
+
+## Open Questions for Auditor
+- None; this handoff is blocked before implementation.
+
+## Executor's Reading (reopened 2026-06-20)
+### What I'll do
+- Implement only the H029 M1 show_text proxy/sidecar and M3 adapter send sidecar path, then run the scoped pytest commands.
+
+### Assumptions made
+- [LOW] The user's "重新打开029" authorizes resuming this handoff from blocked to claimed.
+- [LOW] The missing `test_echo_tool.py` context probe can be replaced by reading the existing `tests/test_pipe_e2e.py` and M1 source files.
+
+## What I Did (reopened 2026-06-20)
+- Reopened the handoff by moving frontmatter `status` from `blocked` to `claimed`.
+- Confirmed `git status --short` showed only this handoff modified before source edits.
+- Read current M1 and M3 files:
+  - `xiaozhi-mcp-adapter/src/xiaozhi_mcp_adapter/echo_tool.py`
+  - `xiaozhi-mcp-adapter/src/xiaozhi_mcp_adapter/pipe.py`
+  - `xiaozhi-mcp-adapter/tests/test_pipe_e2e.py`
+  - `xiaozhi-mcp-adapter/pyproject.toml`
+  - `hermes-xiaozhi-plugin/src/hermes_xiaozhi/adapter.py`
+  - `hermes-xiaozhi-plugin/tests/test_adapter_send.py`
+  - `hermes-xiaozhi-plugin/tests/test_register.py`
+  - `hermes-xiaozhi-plugin/pyproject.toml`
+- Did not modify source files and did not run tests.
+- Blocked again because context-read commands failed while probing for directory INDEX files:
+
+```text
+sed: can't read docs/designs/INDEX.md: No such file or directory
+```
+
+```text
+sed: can't read docs/contracts/INDEX.md: No such file or directory
+```

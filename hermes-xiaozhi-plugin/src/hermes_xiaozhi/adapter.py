@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import hmac
+import json
 import logging
 import os
 from typing import Any, Dict, Optional
 
 import httpx
+from aiohttp import web
 
 from gateway.config import Platform, PlatformConfig
 from gateway.platform_registry import PlatformEntry, platform_registry
@@ -47,10 +52,20 @@ class XiaozhiAdapter(BasePlatformAdapter):
         super().__init__(config, _xiaozhi_platform())
         extra = config.extra or {}
 
+        self.host = (
+            os.getenv("XIAOZHI_WEBHOOK_HOST")
+            or extra.get("host")
+            or "127.0.0.1"
+        )
         self.webhook_port = int(
             os.getenv(
                 "XIAOZHI_WEBHOOK_PORT",
-                str(extra.get("webhook_port", DEFAULT_WEBHOOK_PORT)),
+                str(
+                    extra.get(
+                        "webhook_port",
+                        extra.get("port", DEFAULT_WEBHOOK_PORT),
+                    )
+                ),
             )
             or DEFAULT_WEBHOOK_PORT
         )
@@ -66,13 +81,93 @@ class XiaozhiAdapter(BasePlatformAdapter):
             os.getenv("XIAOZHI_MCP_ADAPTER_URL")
             or extra.get("mcp_adapter_url", "")
         ).rstrip("/")
+        self._runner: Optional[web.AppRunner] = None
 
     async def connect(self) -> bool:
-        # TODO(H028.bis): start the signed webhook listener on webhook_port.
+        app = web.Application()
+        app.router.add_post("/webhooks/xiaozhi-transcript", self._handle_transcript)
+
+        self._runner = web.AppRunner(app)
+        await self._runner.setup()
+        site = web.TCPSite(self._runner, self.host, self.webhook_port)
+        await site.start()
+        server = getattr(site, "_server", None)
+        sockets = getattr(server, "sockets", None)
+        if sockets:
+            self.webhook_port = int(sockets[0].getsockname()[1])
+        self._mark_connected()
+        LOG.info("XiaoZhi listener started on %s:%s", self.host, self.webhook_port)
         return True
 
     async def disconnect(self) -> None:
+        if self._runner is not None:
+            await self._runner.cleanup()
+            self._runner = None
+        self._mark_disconnected()
         return None
+
+    def _validate_signature(self, body: bytes, signature: str) -> bool:
+        if not signature:
+            return False
+        expected = "sha256=" + hmac.new(
+            self.webhook_secret.encode(),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(signature, expected)
+
+    async def _handle_transcript(self, request: web.Request) -> web.Response:
+        raw_body = await request.read()
+        if not self.webhook_secret:
+            return web.json_response(
+                {"error": "Webhook route is missing an HMAC secret"},
+                status=403,
+            )
+
+        signature = request.headers.get("X-Hub-Signature-256", "")
+        if not self._validate_signature(raw_body, signature):
+            return web.json_response({"error": "Invalid signature"}, status=401)
+
+        try:
+            payload = json.loads(raw_body)
+        except json.JSONDecodeError:
+            return web.json_response({"error": "Cannot parse body"}, status=400)
+
+        user_text = payload.get("user_text", payload.get("user", ""))
+        assistant_text = payload.get(
+            "assistant_text",
+            payload.get("assistant", ""),
+        )
+        device_id = payload.get("device_id") or self.device_id
+        device_id = str(device_id or "unknown")
+        prompt = (
+            f"XiaoZhi user said: {user_text}. "
+            f"Assistant replied: {assistant_text}"
+        )
+        chat_id = f"xiaozhi:{device_id}"
+        source = self.build_source(
+            chat_id=chat_id,
+            chat_name=f"XiaoZhi-{device_id}",
+            chat_type="dm",
+            user_id=device_id,
+            user_name="XiaoZhi",
+        )
+        event = MessageEvent(
+            text=prompt,
+            message_type=MessageType.TEXT,
+            source=source,
+            raw_message=payload,
+            message_id=request.headers.get("X-Request-ID"),
+        )
+
+        task = asyncio.create_task(self.handle_message(event))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+        return web.json_response(
+            {"status": "accepted", "chat_id": chat_id},
+            status=202,
+        )
 
     async def send(
         self,
