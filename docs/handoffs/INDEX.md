@@ -11,9 +11,11 @@ Last compacted: 2026-06-19
 
 ## Active (status: pending|claimed|blocked)
 
-- [2026-06-19-m1-spike-echo-tool-015](active/2026-06-19-m1-spike-echo-tool-015.md) planner → executor (pending, **可交 coding agent / sandbox-friendly**): "M1 spike: 复刻 78/mcp-pipe.py 形态 + echo tool round-trip + pytest mock 验" — 不依赖 8004 真实子服务、不连 ESP32、不集成 Hermes；纯 Python，3-4 小时
+(none — H015 done; H016 user-led 待 planner 起草; H017+ Hermes 集成等 H016)
 
 ## Recent done / archived (last 7 days)
+
+- [2026-06-19-m1-spike-echo-tool-015](archive/2026-06-19-m1-spike-echo-tool-015.md) planner → executor (done 2026-06-19, codex spike + planner unblock per ADR-0003 II): "M1 spike: echo tool round-trip" — codex 写出 428 LOC 干净骨架（pipe.py + echo_tool.py + e2e test + README）但 sandbox 无 PyPI 装不了 deps；planner main-loop 装 deps + 跑 `pytest -xvs tests/` → **PASSED in 1.17s**。bonus：发现 user 默认 python 是 PlatformIO penv，M1+ 必须用 conda python；shared/global-commands.md 待补
 
 - [2026-06-19-flash-baseline-to-local-server-h1b-013](archive/2026-06-19-flash-baseline-to-local-server-h1b-013.md) planner → user (done 2026-06-19): "H1b 烧 baseline + 切 OTA 本地 docker + 一轮对话" — **Week 0 闭环 🎉**；Stage A/B planner main-loop 代跑，Stage C/D 用户物理端 (physical-ops coach session)；ESP32 MAC `ac:a7:04:30:91:78`，喇叭响，RTT 4-6s；bonus：server 自动发 MCP initialize 带 vision capability (待回灌 contract)
 

@@ -4,7 +4,7 @@ from: planner
 to: executor
 parent: 2026-06-19-flash-baseline-to-local-server-h1b-013
 supersedes:
-status: pending
+status: done
 created: 2026-06-19
 artifacts:
   - xiaozhi-mcp-adapter/ (new Python package, repo root)
@@ -190,3 +190,156 @@ M1 正式落地（H017+）累计 3-4 个 handoff done 之后一起 batch audit�
   mcp-endpoint 子服务，拿真 token，跑 `MCP_ENDPOINT=ws://<host>:8004/...
   python -m xiaozhi_mcp_adapter.pipe`，**让 server 真的拨过来调 echo**
 - H016 done = M1 真正能跟 xinnan-tech 互通，再开 H017（Hermes 工具适配）
+
+## Executor's Reading
+### What I'll do
+- 新建 `xiaozhi-mcp-adapter/` Python 包，写一个只从 `MCP_ENDPOINT` 拨 WS 的 pipe、一个 stdio MCP echo server，并用 mock WS server 覆盖 initialize → tools/list → tools/call 的 round-trip。
+
+### Assumptions made
+- [LOW] 当前仓库没有既有 `xiaozhi-mcp-adapter/` 包；我会新建 handoff 指定的单一目录，不改 ESP32、ADR、contract、research notes 或 `.claude/`。
+- [LOW] `pipe.py` 只支持默认 echo tool 子进程，不提供可配置子命令；这是 H015 明确要求保 spike 干净。
+- [LOW] 测试里的 mock WS server 复用 xinnan-tech 研究笔记中的 MCP endpoint 序列：WS 连接后由 mock 端发 `initialize`、`notifications/initialized`、`tools/list`、`tools/call`，pipe 只透明转发 JSON-RPC。
+- [MED] 当前 Python 环境缺 `mcp`、`websockets`、`pytest`、`pytest-asyncio`；我会按 `pyproject.toml` 安装项目测试依赖。如果 sandbox 网络或包索引不可用导致安装失败，会按 substantive error 阻塞并贴完整 stderr。
+- [MED] 上游 `mcp-pipe.py` 只作为行为参考；实现会按本 handoff 和 xinnan-tech 本地源码重写，不复制上游模板代码。
+
+## What I Did
+- 新建 H015 指定的单一目录 `xiaozhi-mcp-adapter/`，包含：
+  - `pyproject.toml`
+  - `src/xiaozhi_mcp_adapter/__init__.py`
+  - `src/xiaozhi_mcp_adapter/pipe.py`
+  - `src/xiaozhi_mcp_adapter/echo_tool.py`
+  - `tests/test_pipe_e2e.py`
+  - `README.md`
+- `pipe.py` 已按 spike 范围实现：从 `MCP_ENDPOINT` 读取 WS URL、`websockets.connect()` 拨号、`subprocess.Popen` 启默认 echo child、三路协程转发/日志、SIGINT/SIGTERM 退出、1s→2s→4s...最多 600s 的 ±10% jitter 重连退避。
+- `echo_tool.py` 已按 stdio MCP server 形态实现单个 `echo(text: str)` tool，返回 `echoed: ` + text。
+- `tests/test_pipe_e2e.py` 已写 mock WS server，覆盖 initialize → notifications/initialized → tools/list → tools/call("echo", {"text":"hi"}) 的 round-trip 期望。
+- 发现 `asyncio.to_thread` 不兼容 `requires-python >=3.8`，已改为 `loop.run_in_executor`；语法检查通过：
+  `python3 -m py_compile src/xiaozhi_mcp_adapter/__init__.py src/xiaozhi_mcp_adapter/pipe.py src/xiaozhi_mcp_adapter/echo_tool.py tests/test_pipe_e2e.py`
+- `README.md` 行数：`58 README.md`，满足 ≤60 行约束。
+- 阻塞点：当前 sandbox 没有 `mcp`、`websockets`、`pytest`、`pytest-asyncio`，且 PyPI 访问被网络/权限拦截；无法安装依赖，也就无法运行 `python -m xiaozhi_mcp_adapter.echo_tool` 或 `pytest -xvs tests/` 做 AC 验证。
+- 未修改 ESP32、ADR、contracts、research notes 或 `.claude/`；未 commit。
+- `git status --short`：
+
+```text
+ M docs/handoffs/active/2026-06-19-m1-spike-echo-tool-015.md
+ ? esp/xiaozhi-esp32
+?? xiaozhi-mcp-adapter/
+```
+
+- 完整 stderr / command output：
+
+```text
+$ uv pip install --system -e '.[test]'
+error: Could not acquire lock
+  Caused by: Could not create temporary file
+  Caused by: Read-only file system (os error 30) at path "/home/kk/.cache/uv/.tmpXe1uMj"
+```
+
+```text
+$ UV_CACHE_DIR=/tmp/uv-cache uv pip install --system -e '.[test]'
+Using Python 3.13.9 environment at: /home/kk/miniconda3
+error: Request failed after 3 retries in 8.1s
+  Caused by: Failed to fetch: `https://pypi.org/simple/pytest-asyncio/`
+  Caused by: error sending request for url (https://pypi.org/simple/pytest-asyncio/)
+  Caused by: client error (Connect)
+  Caused by: tunnel error: failed to create underlying connection
+  Caused by: tcp open error
+  Caused by: Operation not permitted (os error 1)
+```
+
+## Open Questions for Planner/User
+- 请在有 PyPI/proxy 权限的用户主终端续跑：
+  `cd xiaozhi-mcp-adapter && UV_CACHE_DIR=/tmp/uv-cache uv pip install --system -e '.[test]' && pytest -xvs tests/`。
+  → **2026-06-19 已解决**：planner main-loop 接 unblock。下方 §"Unblock + PASS"。
+
+---
+
+## Unblock + PASS (planner main-loop, 2026-06-19)
+
+> 跟 H012 / H013 同一类 ADR-0003 II 代跑模式：codex sandbox 无 PyPI / 网络
+> proxy 不可达；planner 本会话有 proxy → 装 deps + 跑 pytest。
+
+### 装依赖
+
+```bash
+cd ~/code/robot_class/final_pro_xiaozhi_robot/xiaozhi-mcp-adapter
+UV_CACHE_DIR=/tmp/uv-cache uv pip install --system -e '.[test]'
+# uv 默认绑定 /home/kk/miniconda3 的 Python 3.13.9
+# 装了：mcp==1.28.0, websockets, pytest==9.1.0, pytest-asyncio==1.4.0,
+#       httpx-sse, starlette, sse-starlette, uvicorn, anyio (mcp 间接依赖)
+```
+
+⚠️ **环境坑（不属 H015 scope，仅记录）**：用户默认 shell 的 `python3` 指向
+`/home/kk/.platformio/penv/bin/python3` （PlatformIO penv），uv 装到的
+是 `/home/kk/miniconda3/lib/python3.13/site-packages/`。后续跑测/手动
+demo 必须明示用 `/home/kk/miniconda3/bin/python`，或 user 改 default
+python 指向。回灌点：[shared/global-commands.md §Python 桥接服务](../../../.claude/memory/shared/global-commands.md)
+要补一段"M1+ Python 包都用 conda Python 跑"。
+
+### 烟测 echo_tool
+
+```bash
+timeout 2 /home/kk/miniconda3/bin/python -m xiaozhi_mcp_adapter.echo_tool < /dev/null
+# EXIT=0 ✅（stdin EOF → 干净退）
+```
+
+### pytest e2e PASS
+
+```text
+$ /home/kk/miniconda3/bin/python -m pytest -xvs tests/
+============================= test session starts ==============================
+platform linux -- Python 3.13.9, pytest-9.1.0, pluggy-1.5.0
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.12.1
+asyncio: mode=Mode.AUTO
+
+tests/test_pipe_e2e.py::test_pipe_echo_roundtrip PASSED
+
+============================== 1 passed in 1.17s ===============================
+```
+
+### AC 验证
+
+| # | AC | 结果 |
+|---|---|---|
+| 1 | 包结构齐全 | ✅ 6 文件 (`pyproject.toml`, `__init__.py`, `pipe.py`, `echo_tool.py`, `tests/test_pipe_e2e.py`, `README.md`) |
+| 2 | pyproject PEP 621 + name + python>=3.8 + test extras | ✅ |
+| 3 | `pipe.py` 行为齐全（env + WS + Popen + 三协程 + jitter retry + signal） | ✅ 176 行 |
+| 4 | `echo_tool.py` 合法 MCP stdio server | ✅ 71 行；用 `mcp.server.lowlevel.Server` + `mcp.server.stdio.stdio_server` |
+| 5 | pytest e2e PASS | ✅ 1.17s |
+| 6 | pytest 输出 ≤30 行 | ✅ 上面贴的 9 行 |
+| 7 | README ≤60 行 | ✅ 58 行 |
+| 8 | 不写 Hermes / 不改 pipe 接受其它子进程 | ✅ |
+| 9 | git status 仅一目录 untracked | ✅ `xiaozhi-mcp-adapter/` |
+
+### git status (commit 前)
+
+```text
+ M docs/handoffs/active/2026-06-19-m1-spike-echo-tool-015.md
+ ? esp/xiaozhi-esp32
+?? xiaozhi-mcp-adapter/
+```
+
+### Bonus observations（给 H017 用）
+
+- `pipe.py` 用 `asyncio.wait(... FIRST_COMPLETED)` + 异常重抛—— round-trip
+  通过后会立刻退出（因为 mock 端关 WS 触发 `_ws_to_child` 退），不会泄漏。
+  生产场景下要换 `FIRST_EXCEPTION`/`ALL_COMPLETED` 重新考虑
+- `echo_tool` 用的是 `Server` lowlevel API，不是 `FastMCP` 高级 API；M1
+  真业务 tool 多了后切 FastMCP 可能减一半代码
+- mock test 没单独测断线重连 jitter 退避；H017+ 加更全的测试套时补
+- MCP SDK 装下来一堆 starlette / uvicorn / sse_starlette 是因为 `mcp` 含
+  SSE/HTTP server 支持，我们用不到但去不掉。**约 30 MB 装机体积**，
+  不影响功能
+
+### Follow-up handoffs (planner 自承)
+
+- **H016 user-led**：本机起 xinnan-tech 8004 mcp-endpoint 子服务，拿真
+  token，跑 `MCP_ENDPOINT=ws://<host>:8004/mcp_endpoint/mcp/?token=<...>
+  /home/kk/miniconda3/bin/python -m xiaozhi_mcp_adapter.pipe`；让 server
+  真的拨过来调 echo。AC：在 ESP32 端语音说"调 echo 工具 hi"，server logs
+  含 `tools/call echo` 调 result `echoed: hi`，DeepSeek 把这话回给用户
+- **shared/global-commands.md 回灌**：M1+ Python 包要用
+  `/home/kk/miniconda3/bin/python`（而不是默认 PlatformIO penv）。这是
+  H015 unblock 时踩的次坑，要把命令写明，避免后续每个 Python handoff 都
+  重复发现
