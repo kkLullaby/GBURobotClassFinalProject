@@ -67,3 +67,27 @@ hermes webhook subscribe xiaozhi-transcript \
 When the env var is set, the shim posts `{user, assistant, model, session,
 timestamp_unix}` to Hermes after each streamed response. The fork is
 fire-and-forget: Hermes failures are logged and do not break the SSE response.
+
+## H021 DeepSeek Backend
+
+Backend selection is explicit:
+
+```bash
+OPENAI_SHIM_BACKEND=echo                  # default
+OPENAI_SHIM_BACKEND=deepseek
+DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+HERMES_TRANSCRIPT_URL=http://localhost:8088/webhooks/xiaozhi-transcript
+```
+
+Example smoke with a placeholder key:
+
+```bash
+OPENAI_SHIM_BACKEND=deepseek DEEPSEEK_API_KEY=sk-... \
+  /home/kk/miniconda3/bin/python -m uvicorn openai_shim.app:app --port 8089
+curl -N -X POST http://localhost:8089/v1/chat/completions \
+  -H "Authorization: Bearer fake" -H "Content-Type: application/json" \
+  -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"用一句话介绍你自己"}],"stream":true}'
+```
+
+H022 should run the end-to-end path: DeepSeek backend plus Hermes fork plus ESP32 voice.

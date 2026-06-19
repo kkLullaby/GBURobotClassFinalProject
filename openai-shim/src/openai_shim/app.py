@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI, Header
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from .deepseek_backend import DeepSeekBackend
 from .echo_backend import EchoBackend, TextBackend
 from .hermes_backend import HermesBackend
 from .sse import chat_completion_sse
@@ -27,10 +28,24 @@ app = FastAPI(title="openai-shim")
 
 
 def _build_backend() -> TextBackend:
+    backend_kind = os.environ.get("OPENAI_SHIM_BACKEND", "echo").lower()
+    if backend_kind == "deepseek":
+        api_key = os.environ.get("DEEPSEEK_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "DEEPSEEK_API_KEY required when OPENAI_SHIM_BACKEND=deepseek"
+            )
+        inner = DeepSeekBackend(
+            api_key=api_key,
+            base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        )
+    else:
+        inner = EchoBackend()
+
     transcript_url = os.environ.get("HERMES_TRANSCRIPT_URL")
     if transcript_url:
-        return HermesBackend(EchoBackend(), transcript_url)
-    return EchoBackend()
+        return HermesBackend(inner, transcript_url)
+    return inner
 
 
 _backend: TextBackend = _build_backend()
