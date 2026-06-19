@@ -11,9 +11,11 @@ Last compacted: 2026-06-19
 
 ## Active (status: pending|claimed|blocked)
 
-- [2026-06-19-flash-baseline-to-local-server-h1b-013](active/2026-06-19-flash-baseline-to-local-server-h1b-013.md) planner → **user** (pending): "H1b 烧 baseline + 切 OTA 到本地 docker server + monitor 一轮对话" — 需 USB 线 + 同 wifi LAN；server.websocket 当前是 0.0.0.0 必须先改 LAN IP；A-bis 用 wscat 先验 server 端
+(none — **Week 0 完全闭环** 🎉；M1 开工前 planner 先做 follow-up 回灌 (H014) + retro)
 
 ## Recent done / archived (last 7 days)
+
+- [2026-06-19-flash-baseline-to-local-server-h1b-013](archive/2026-06-19-flash-baseline-to-local-server-h1b-013.md) planner → user (done 2026-06-19): "H1b 烧 baseline + 切 OTA 本地 docker + 一轮对话" — **Week 0 闭环 🎉**；Stage A/B planner main-loop 代跑，Stage C/D 用户物理端 (physical-ops coach session)；ESP32 MAC `ac:a7:04:30:91:78`，喇叭响，RTT 4-6s；bonus：server 自动发 MCP initialize 带 vision capability (待回灌 contract)
 
 - [2026-06-19-idf-build-verify-h1a-012](archive/2026-06-19-idf-build-verify-h1a-012.md) planner → executor (done 2026-06-19, planner main-loop unblock per ADR-0003 II): "H1a 本机 IDF 5.5.2 build 验证 (OTTO_ROBOT 板; 不 flash)" — **xiaozhi.bin 3.5 MiB, 11% free**；3 处 unblock：codex 沙箱无 proxy + IDF submodules 用户漏 init + OTTO_ROBOT 板必须 append 3 个 CONFIG (HTTPD_WS_SUPPORT + CAMERA_OV2640/3660, 来自 `boards/otto-robot/config.json`)；7 min wall-clock 全冷 build；13 warning 全是上游
 - [2026-06-19-docs-alignment-009](archive/2026-06-19-docs-alignment-009.md) planner → executor (done 2026-06-19): "Week 0 ADR 落地后 6 处文档对齐" — 6 处 wording 落地（CLAUDE.md IDF 不入库 / shared/ submodule + Hermes 命令实测 / tech-stack Week 0 commit pin / roadmap §Week 3 + Day 16 OBSOLETE banner / README clone 含 submodule）；未 commit；H012 blocked 摘要在 What I Did

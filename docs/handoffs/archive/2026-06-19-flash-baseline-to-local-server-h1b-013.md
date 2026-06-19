@@ -4,7 +4,7 @@ from: planner
 to: user
 parent: 2026-06-19-idf-build-verify-h1a-012
 supersedes:
-status: blocked
+status: done
 created: 2026-06-19
 artifacts:
   - esp/xiaozhi-esp32/sdkconfig (改 OTA_URL)
@@ -278,3 +278,132 @@ $ grep -E 'websocket:' /home/kk/code/xinnan-tech/xiaozhi-esp32-server/main/xiaoz
 
 ## Open Questions for Planner/User
 - 需要在有 docker/netlink/USB 权限的用户主终端继续 H013；本 Codex sandbox 无法完成 H1b 的真实 server + LAN + flash + monitor 验证。
+  → **2026-06-19 03:30 已解决**：planner main-loop 跑 Stage A/A-bis/B；用户跑 Stage C/D。详见下方 §"H1b Full Closure"。
+
+---
+
+## H1b Full Closure (2026-06-19, planner main-loop + user physical)
+
+> 路径划分：Stage A/A-bis/B (planner main-loop，有 docker+IDF+proxy) →
+> Stage C/D (user 物理端，新开 physical-ops coach session 指导)。
+> 总耗时 ~30 min（含 wifi 配网 + 增量 build 3m17s）。
+
+### Stage A — server config (planner)
+
+- 主机切到手机热点 `kklull`，host LAN IP = `10.206.218.66/24` (wlp0s20f3)
+- 改 `~/code/xinnan-tech/xiaozhi-esp32-server/main/xiaozhi-server/data/.config.yaml`
+  `server.websocket: ws://0.0.0.0:8000/...` → `ws://10.206.218.66:8000/xiaozhi/v1/`
+- `docker compose restart` + 等 ~8s (第一次 sleep=4 不够，触发预期外的 OTA 不可达)
+- 验：`curl http://10.206.218.66:8003/xiaozhi/ota/` 返回
+  `"OTA接口运行正常，向设备发送的websocket地址是：ws://10.206.218.66:8000/xiaozhi/v1/"`
+
+### Stage A-bis — wscat sanity (planner)
+
+```bash
+wscat -c "ws://10.206.218.66:8000/xiaozhi/v1/" \
+  -H "Protocol-Version: 1" -H "Device-Id: aa:bb:cc:dd:ee:01" -H "Client-Id: test-uuid-h1b-planner"
+> {"type":"hello","version":1,"features":{"mcp":true,"aec":false},...}
+< {"type":"hello","transport":"websocket","session_id":"48b12ca8-...","audio_params":{...}}
+< {"type":"mcp","payload":{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+    "protocolVersion":"2024-11-05",
+    "capabilities":{"roots":{"listChanged":true},"sampling":{},
+                    "vision":{"url":"http://172.19.0.2:8003/mcp/vision/explain","token":"<JWT>"}},
+    "clientInfo":{"name":"XiaozhiClient","version":"1.0.0"}}}}
+```
+
+**Bonus discovery**：server hello 后**自动发 type:"mcp" 的 initialize**，
+含 `vision` capability（带 JWT token 指向 `mcp/vision/explain`）。
+这件事 contract v1 没明写——证明 contract §4.2 "server 是 MCP client" 正确，
+**且** 还存在 vision 能力。**待回灌 contract**（见 §"Open Questions ②"）。
+
+### Stage B — sdkconfig + rebuild (planner)
+
+- 备份 `sdkconfig` → `sdkconfig.h1a-baseline`（gitignored）
+- `CONFIG_OTA_URL="https://api.tenclass.net/xiaozhi/ota/"` →
+  `CONFIG_OTA_URL="http://10.206.218.66:8003/xiaozhi/ota/"`
+- 验 OTTO_ROBOT + HTTPD_WS_SUPPORT + CAMERA_OV 三组 CONFIG 仍在
+- `time idf.py build` 增量重 build → **3m17s** (主要重 link，xiaozhi.bin
+  大小不变 3.5 MiB / 11% free)
+- `strings build/xiaozhi.bin | grep 10.206.218.66` 确认 URL 已嵌入
+
+### Stage C — flash + monitor (user)
+
+- 串口设备：`/dev/ttyACM0` (ESP32-S3 内置 USB-OTG，非 CH340/CP210x)
+  - **教训**：handoff 写的是 `ttyUSB*`，OttoRobot 板用 OTG → ACM；
+    要改 [shared/global-commands.md §ESP32](../../../.claude/memory/shared/global-commands.md) 补 ACM 注释
+- 首次 flash 后卡在 `boot:0x0 (DOWNLOAD)` + `waiting for download` → 按 **RST**
+  键脱困（physical-ops coach 指导）
+- 走 BluFi/SoftAP 配 wifi `kklull` (用户手机 app 完成)
+- 监 monitor 4 段：
+  - `I (6874) Application: Activation done` (boot ok)
+  - `I (5674) WifiBoard: Connected to WiFi: kklull` (wifi ok)
+  - `I (6824) HttpClient: Established new connection to 10.206.218.66:8003` (OTA pulled)
+  - `session_id bbc16c92-c8eb-43e8-ae67-f80b0ba23be4` (WS ok)
+
+### Stage D — server-side + audio (user)
+
+```bash
+docker logs xiaozhi-esp32-server 2>&1 | tail -50
+```
+
+返回（人工浓缩）：
+
+- `OTA请求设备ID: ac:a7:04:30:91:78`
+- `conn Headers include device-id ac:a7:04:30:91:78`
+- `收到hello消息 + 收到listen消息 session_id=bbc16c92-c8eb-43e8-ae67-f80b0ba23be4`
+- `ASR 识别文本: 你好，小子。` （ASR 把"小智"识别成"小子"，FunResponse 表现）
+- `TTS 语音生成成功: 哈喽～你哪位啊？`
+- `初始化组件: llm成功 DeepSeekLLM`
+
+**Subjective**：喇叭有响 ✅；一轮对话 RTT ≈ 4-6s
+（按 03:29:32 ASR → 03:29:36 第一段 TTS 估算）
+
+### AC 验证
+
+| # | AC | 实测 |
+|---|---|---|
+| 1 | `WiFi connected` 等价日志 | ✅ `I (5674) WifiBoard: Connected to WiFi: kklull` |
+| 2 | OTA 返回 200 + 含本地 ws URL | ✅ `Established new connection to 10.206.218.66:8003`；A 段 curl 也验过 |
+| 3 | ESP32 `Session ID:` + server connected | ✅ `session_id bbc16c92-...`；docker logs 含 device MAC |
+| 4 | server logs 含 STT/LLM/TTS + 喇叭有回复 | ✅ 全部命中，喇叭响 |
+| 5 | wscat sanity | ✅ (A-bis) |
+| 6 | ≤15 行 memo | ✅ 上面 Subjective + 4 段日志 |
+| 7 | 不让 monitor 一直跑 | ✅ 用户手动 Ctrl+] 退出 |
+
+### Final facts for contract §8 backfill
+
+| 字段 | 值 |
+|---|---|
+| ESP32 device MAC | `ac:a7:04:30:91:78` |
+| 实际用的 LAN IP | `10.206.218.66/24` (主机 wlp0s20f3 接手机热点 `kklull`) |
+| 串口设备 | `/dev/ttyACM0` (ESP32-S3 USB-OTG) |
+| Stage B 增量 build 耗时 | 3m17s |
+| WS 握手 RTT | < 1s (人观察未感延迟，monitor 时戳间隔 < 1s) |
+| LLM 一轮 RTT | ~4-6s (主观，FunASR + DeepSeek + EdgeTTS 链路) |
+| ESP32 boot heap free | (未单独 grep，已写进 follow-up Open Q ②) |
+| Bonus: server 主动发 MCP initialize | 含 `vision` capability + JWT；contract v1 没覆盖 |
+
+## Open Questions for Planner (follow-up，本 handoff done 后单起 H014/H015)
+
+① **回灌 contract §8 实测段**：把上面 6 条 fact 写进
+  `docs/contracts/api/v1/esp32-to-server-handshake.md` §8
+
+② **contract v2 / 补丁**：server 主动发 MCP `initialize`（带 `vision` capability）
+  在 v1 没写。要么 v1 补 §4.2.bis"server initialize 自动触发"段（保 v1），
+  要么起 v2。倾向**前者**（不算 breaking change，只是新增已存在事实的记录）
+
+③ **回灌 `shared/global-commands.md`**：
+  - 加注释 "OttoRobot 板用 USB-OTG，串口是 /dev/ttyACM0 不是 ttyUSB0"
+  - 加注释 "首次 flash 完会卡 download mode，按 RST 切 normal boot"
+  - 加注释 "首次 boot 需 BluFi/SoftAP 配 wifi"
+
+④ **Bitter lesson 候选**：handoff §Stage C 第 3 行命令默认 `/dev/ttyUSB0`，
+  实际是 `/dev/ttyACM0` —— planner 写 handoff 时把"上一个项目的默认"凭印象
+  写进去了，违反 "shared/global-commands 是事实" 纪律。要补记。
+
+⑤ **ASR 识别"小智"→"小子"** 是 FunASR 默认模型问题，不影响项目，
+  写进 README/demo-script "知名 issue" 段即可，不算 fact
+
+⑥ **boot heap free** 没单独 grep。M4 开工前 single run `idf.py monitor`
+  抓一行 `heap_init: Initial heap free: <N>` 写进 m4-bin-size-budget.md
+
