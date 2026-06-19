@@ -12,6 +12,8 @@ Last compacted: 2026-06-19
 ## Active (status: pending|claimed|blocked)
 
 - [2026-06-19-mcp-endpoint-server-bringup-016](active/2026-06-19-mcp-endpoint-server-bringup-016.md) planner → **user** (blocked, Stage A/B/C done by planner main-loop, Stage D ESP32 voice 留 user; **新加 ready-to-run paste 块** 6h 后基础设施仍 LIVE): "起 xinnan-tech mcp-endpoint-server (port 8004) + 配进 xiaozhi-server + 真 M1 pipe round-trip + ESP32 voice 调 echo tool" — **9/13 AC ✅**：mcp-endpoint up + KEY/TOKEN extracted + config 含 `mcp接入点是 ws://10.2.244.38:8004/...` + M1 pipe `connected to MCP endpoint`；剩 4 AC 物理段：用户连 wifi 10.2 段 + 1-paste 命令在 §Stage D Ready-to-Run 段
+- [2026-06-19-demo-end-to-end-real-deepseek-via-shim-022](active/2026-06-19-demo-end-to-end-real-deepseek-via-shim-022.md) planner → **user** (pending, ~30-45 min): "改 xinnan-tech LLM provider base_url 指 shim:8089 + 起 shim with DeepSeekBackend + Hermes fork + ESP32 voice 一轮对话 + hermes session 续聊看 transcript 真进 Hermes 上下文" — Week 1 §1.4 验收终点；ADR-0005 全链路实地 demo；与 H016 互不阻塞
+- [2026-06-19-m4-tools-inventory-spike-023](active/2026-06-19-m4-tools-inventory-spike-023.md) planner → executor (pending, **可交 coding agent / sandbox-friendly**): "M4 spike 盘点 otto-robot 上游已有 8 tool + 决定新加 show_emoji/gesture/show_text/show_qr 4 个 (或裁) → 写 inventory + design + contract 3 份 doc" — Week 2 起点；只读 + 写 doc，不动 C++；M4 真实现 H024+ 起步
 
 ## Recent done / archived (last 7 days)
 
