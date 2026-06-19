@@ -116,16 +116,23 @@
 
 ## Week 3 ▸ M3 + 场景一：完整 channel + cron 自动化
 
+> 📝 **2026-06-19 修订** per [ADR-0005](adr/0005-openai-compat-transcript-egress.md) + [Week 0 retro §6](retros/week0.md)：
+> - 3.1 / 3.4 (Discord callback / 上行音频独立路径) 已**作废**——transcript egress 走 M2 webhook,
+>   H020 实测真 Hermes 已自动 spawn session 收到 user transcript
+> - 3.2 / 3.3 拆成 H028 (Stage A plugin 骨架) + H028.bis (装+hermes run) + H029 (M1 proxy 真 send)
+> - M3 工作量原估 5-6 天 → **实际 1-2 天**（H028 spike ~半天 + H028.bis 半天 + H029 1 天）
+
 ### 任务清单
 
 | # | 任务 | 估时 | 验收 |
 |---|------|------|------|
-| 3.1 | spike：跑通 Hermes 的 Discord plugin（不接真 Discord，看代码理解 voice channel 形态） | 半天 | 能讲清楚 `_voice_input_callback` 在哪定义、被谁调用 |
-| 3.2 | 写 `plugins/platforms/xiaozhi/plugin.yaml` + `adapter.py` 骨架（`connect/disconnect/send/send_typing/get_chat_info`） | 1-2 天 | Hermes 启动加载 plugin 不报错 |
-| 3.3 | adapter 的 `send()` 走 M1 adapter 调 `xiaozhi.speak()` | 1 天 | `hermes -p "echo hi" --platform xiaozhi` 让机器人说 "hi" |
-| 3.4 | 上行音频：让 ESP32 同时把音频流给 xinnan-tech AND 给 Hermes（或者 shim 在中间复制一份转给 Hermes adapter） | 2-3 天 | Hermes TUI 显示 "[xiaozhi] 用户: 你好" |
-| 3.5 | cron job：写一个早安播报（每天 9 点扫 git/calendar 让机器人念出来）| 1 天 | 演示 cron 任务在指定时间触发机器人说话 |
-| 3.6 | Telegram channel 接入（用 Hermes 现成的 Telegram plugin） + routing rule | 1 天 | Telegram 发消息给 bot，机器人通过 `send_message_tool` 转发朗读 |
+| ~~3.1~~ | ~~spike Discord plugin / 理解 voice callback~~ | — | OBSOLETE per [ADR-0004](adr/0004-voice-input-callback-discord-only-confirmed.md) |
+| 3.2 (H028) | 写 `hermes-xiaozhi-plugin/` 包骨架 + XiaozhiAdapter + register(ctx) + 3 mock 测 | 半天 | pytest 3/3 PASS, sandbox-friendly |
+| 3.2b (H028.bis) | ln -s 到 `~/.hermes/plugins/xiaozhi/`, `hermes gateway run` 看 "Platform 'xiaozhi' registered" + 切 shim env 指 plugin webhook | 半天 | hermes 日志见 plugin 注册成功 + ESP32 voice 真 spawn session 显示 "[xiaozhi] 用户: ..." |
+| 3.3 (H029) | M1 加 `show_text_proxy(device_id, text, kind)` stdio tool + adapter.send 调它 | 1 天 | TUI 输 `send xiaozhi:ac:a7:04:30:91:78 "嗨"` → 机器人屏幕弹"嗨" |
+| ~~3.4~~ | ~~上行音频独立路径~~ | — | OBSOLETE (transcript 已经走 M2 webhook，H020 done) |
+| 3.5 | cron job：早安播报 (每天 9 点 deliver=xiaozhi) | 1 天 | 9 点机器人屏幕弹 "早，今天有 N 个 PR 等 review" |
+| 3.6 | Telegram channel + cross-channel routing | 1 天 | Telegram 发消息 → 机器人屏幕显示 "[Telegram] Alice: ..." |
 
 ### 验收 demo（场景一全流程）
 

@@ -11,8 +11,11 @@ Last compacted: 2026-06-19
 
 ## Active (status: pending|claimed|blocked)
 
-(none — Week 0 全部收尾。下一步：H024.bis user flash 端到端测；H027
-docs 集中回灌 [retro §6](../retros/week0.md))
+- [2026-06-19-m3-hermes-plugin-spike-028](active/2026-06-19-m3-hermes-plugin-spike-028.md) planner → executor (pending, **可交 coding agent / sandbox-friendly**): "M3 起航：hermes-xiaozhi-plugin 包骨架 + XiaozhiAdapter(BasePlatformAdapter) + register(ctx) + 3 测 (mock register + send-without-mcp + send-with-mcp)" — ADR-0005 后 M3 工作量 5-6→1-2 天；Stage A 是 sandbox 内的 plugin 骨架, B (装 + hermes run) + C (M1 proxy 真 send) 留 H028.bis / H029；设计快照见 [m3-hermes-plugin-architecture.md](../designs/active/m3-hermes-plugin-architecture.md)
+
+并行 backlog（不阻塞 H028）：
+- H024.bis (user 物理): flash ESP32 + tool count 14 + "笑一个" 验
+- H027 (planner self, ~30min): docs 集中回灌 8 项 (per [retro §6](../retros/week0.md))
 
 ## Recent done / archived (last 7 days)
 
