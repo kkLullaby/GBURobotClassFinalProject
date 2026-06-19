@@ -4,7 +4,7 @@ from: planner
 to: user
 parent: 2026-06-19-idf-build-verify-h1a-012
 supersedes:
-status: pending
+status: blocked
 created: 2026-06-19
 artifacts:
   - esp/xiaozhi-esp32/sdkconfig (改 OTA_URL)
@@ -237,3 +237,44 @@ docker logs xiaozhi-esp32-server 2>&1 | tail -50 | grep -E 'STT|LLM|TTS|DeepSeek
 - ESP32 baseline 编译的 default vs flashed boot heap free = ?（监控 M4 内存预算）
 
 跑完后 planner 把上面 6 条搬进 `docs/contracts/api/v1/esp32-to-server-handshake.md` §8 实测段。
+
+## Executor's Reading
+### What I'll do
+- 按 handoff 顺序先验本地 xinnan-tech server 与 LAN IP，尝试把 server.websocket 和 ESP32 `CONFIG_OTA_URL` 切到同一个 LAN IP，做 WS hello sanity，再增量 build；若当前环境能看到 USB 串口再 flash/monitor，否则按协议阻塞并记录已完成项与完整错误。
+
+### Assumptions made
+- [MED] 虽然 handoff frontmatter 是 `to: user`，但用户在当前 Codex executor 会话中明确要求“阅读并执行”，因此我以代跑方式接手并在本 handoff 留痕；不新增 auditor handoff，因为本 handoff 明确写了“不发 auditor”。
+- [MED] HOST_IP 若只有一条非 docker 私网地址，会按 handoff 的筛选命令自动选用；如果出现多条候选且无法判断 ESP32 所在网段，会停止等待用户确认。
+- [MED] 当前 Codex shell 可能不能访问真实 USB 串口或仓库外 server 配置；我会先执行可验证步骤，遇到权限/设备/命令实错即把 status 推进到 blocked 并贴完整 stderr。
+- [LOW] `esp/xiaozhi-esp32/sdkconfig`、`build/` 是 H013 明确允许的本地编译/配置产物；不修改 `esp/xiaozhi-esp32/main/` 源码。
+
+## What I Did
+- 已按要求重读 executor 约束、CLAUDE.md、handoff protocol、ADR-0003，以及 H013 指定上下文：ESP32↔server handshake contract、H012、H011、server URL 诊断、ADR-0002、ADR-0005、`Kconfig.projbuild`、shared global commands。
+- 已把 handoff 状态从 `pending` 推进到 `claimed`，追加 `Executor's Reading`。
+- Pre-flight 第一组命令触发实质阻塞：当前 Codex sandbox 无法访问 docker daemon / netlink，且本环境的 `localhost:8003` 不通；这会阻止确认 H011 server、选 LAN IP、改 server.websocket、wscat、flash/monitor 的完整 H1b 链路。
+- 已确认仓库外 server config 当前仍是不可给 ESP32 使用的 `websocket: ws://0.0.0.0:8000/xiaozhi/v1/`。
+- 按 H013/H010 错误纪律，未继续 Stage A/B/C/D；未修改 `esp/xiaozhi-esp32/sdkconfig`，未 rebuild，未 flash，未 monitor。
+- 完整 stderr / command output：
+
+```text
+$ docker ps --filter name=xiaozhi-esp32-server --format '{{.Names}} {{.Status}} {{.Ports}}'
+permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
+```
+
+```text
+$ curl -sS http://localhost:8003/xiaozhi/ota/
+curl: (7) Failed to connect to localhost port 8003 after 0 ms: Could not connect to server
+```
+
+```text
+$ ip addr show | grep -E 'inet 10\.|inet 192\.|inet 172\.(16|17|18|19|2[0-9]|3[01])\.' | grep -v 'docker\|br-\|veth' | head -3
+Cannot open netlink socket: Operation not permitted
+```
+
+```text
+$ grep -E 'websocket:' /home/kk/code/xinnan-tech/xiaozhi-esp32-server/main/xiaozhi-server/data/.config.yaml
+  websocket: ws://0.0.0.0:8000/xiaozhi/v1/
+```
+
+## Open Questions for Planner/User
+- 需要在有 docker/netlink/USB 权限的用户主终端继续 H013；本 Codex sandbox 无法完成 H1b 的真实 server + LAN + flash + monitor 验证。
