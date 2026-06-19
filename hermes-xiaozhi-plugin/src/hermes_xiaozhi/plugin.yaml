@@ -1,0 +1,27 @@
+name: xiaozhi-platform
+label: XiaoZhi
+kind: platform
+version: 0.1.0
+description: >
+  XiaoZhi (ESP32-S3 OttoRobot) platform adapter for Hermes Agent.
+  Receives transcripts from M2 openai-shim via signed webhook,
+  sends responses back through M1 mcp-adapter -> ESP32 show_text.
+author: kkLullaby
+requires_env:
+  - name: XIAOZHI_WEBHOOK_PORT
+    description: "Port for the adapter's incoming webhook (default 8645)"
+    prompt: "Webhook port"
+    password: false
+  - name: XIAOZHI_WEBHOOK_SECRET
+    description: "HMAC secret shared with the openai-shim (X-Hub-Signature-256)"
+    prompt: "Webhook secret"
+    password: true
+optional_env:
+  - name: XIAOZHI_DEVICE_ID
+    description: "Default ESP32 device MAC (e.g. ac:a7:04:30:91:78)"
+    prompt: "Default device id"
+    password: false
+  - name: XIAOZHI_MCP_ADAPTER_URL
+    description: "M1 adapter endpoint for reverse send() (default disabled)"
+    prompt: "M1 adapter URL"
+    password: false

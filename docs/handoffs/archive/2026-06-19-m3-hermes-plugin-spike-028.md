@@ -4,7 +4,7 @@ from: planner
 to: executor
 parent: 2026-06-19-m2-hermes-hmac-sign-025
 supersedes:
-status: pending
+status: done
 created: 2026-06-19
 artifacts:
   - hermes-xiaozhi-plugin/pyproject.toml (新)
@@ -285,3 +285,202 @@ git status --short
   socket 或起 sidecar HTTP)
 - 我们做的 plugin 进上游 Hermes PR 时 license 怎么处理？(`hermes-xiaozhi-plugin`
   独立 LICENSE, MIT)
+
+## Executor's Reading
+### What I'll do
+- 新建 `hermes-xiaozhi-plugin/` Stage A 包骨架，实现 `XiaozhiAdapter` 四个 Hermes abstract methods、`register(ctx)` 和 3 个 mock pytest，不真装、不跑 Hermes、不改 M1/M2/M4。
+
+### Assumptions made
+- [LOW] 仓库根下没有可复用的 `hermes-xiaozhi-plugin` 或同名 plugin 包，因此按 handoff 新建目录。
+- [LOW] H028 明确“不发 auditor”，完成后只在当前 handoff 追加 What I Did，不新建 auditor handoff。
+- [LOW] `plugin.yaml` 和 `register(ctx)` 中出现 `🤖` / `≤` 是 handoff 明确要求，属于本任务必要的非 ASCII 内容。
+- [MED] Hermes 当前 `Platform("xiaozhi")` 只在 plugin 已被 runtime registry 注册后才会通过；Stage A 的直接 adapter 单测若绕过真实 plugin loader，需要在测试或 adapter 内先确保 registry 已有 `xiaozhi`，但这只影响本包 mock 测试形态，不改变跨模块 contract。
+
+## What I Did
+- 已读取启动纪律文件：
+  - `.claude/agents/executor.md`
+  - `CLAUDE.md`
+  - `.claude/rules/handoff-protocol.md`
+  - `docs/adr/0003-executor-runs-in-main-loop.md`
+- 已读 `docs/handoffs/INDEX.md`、当前 H028、`docs/designs/active/m3-hermes-plugin-architecture.md`、`docs/adr/INDEX.md`、`docs/adr/0005-openai-compat-transcript-egress.md`、`docs/handoffs/archive/INDEX.md`、H020/H025/H024 归档 handoff、`.claude/memory/shared/global-commands.md`、`openai-shim/src/openai_shim/hermes_backend.py`。
+- 已读 Hermes 本机只读参考：
+  - `gateway/platforms/base.py`
+  - `gateway/platform_registry.py`
+  - `gateway/config.py`
+  - `hermes_cli/plugins.py`
+  - `plugins/platforms/ntfy/__init__.py`
+  - `plugins/platforms/ntfy/plugin.yaml`
+  - `plugins/platforms/ntfy/adapter.py`
+- 已检查仓库根下无现成 `hermes-xiaozhi-plugin` 可扩展。
+- 已新建 H028 指定 package 骨架：
+  - `hermes-xiaozhi-plugin/pyproject.toml`
+  - `hermes-xiaozhi-plugin/src/hermes_xiaozhi/__init__.py`
+  - `hermes-xiaozhi-plugin/src/hermes_xiaozhi/adapter.py`
+  - `hermes-xiaozhi-plugin/src/hermes_xiaozhi/plugin.yaml`
+  - `hermes-xiaozhi-plugin/README.md`
+  - `hermes-xiaozhi-plugin/tests/test_register.py`
+  - `hermes-xiaozhi-plugin/tests/test_adapter_send.py`
+- 未真装 plugin 到 `~/.hermes/plugins/`，未跑 `hermes gateway run`，未改 Hermes 本体，未改 openai-shim / xiaozhi-mcp-adapter / esp。
+- 运行 editable install 时失败；按 H028 错误纪律 “PyPI 装不上：blocked + 完整 stderr”，本 handoff 已停止，未继续跑 pytest。
+
+Command:
+
+```bash
+cd hermes-xiaozhi-plugin
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+UV_CACHE_DIR=/tmp/uv-cache uv pip install --system -e '.[test]'
+```
+
+Full output:
+
+```text
+Using Python 3.13.9 environment at: /home/kk/miniconda3
+error: Request failed after 3 retries in 7.1s
+  Caused by: Failed to fetch: `https://pypi.org/simple/pytest-asyncio/`
+  Caused by: error sending request for url (https://pypi.org/simple/pytest-asyncio/)
+  Caused by: client error (Connect)
+  Caused by: dns error
+  Caused by: failed to lookup address information: Temporary failure in name resolution
+```
+
+## Open Questions for Planner / User
+- `uv pip install` 失败点是 DNS/PyPI 访问，不是代码错误。请确认是否允许重新打开 H028，并跳过 install 直接用现有环境 + `PYTHONPATH=src:$HOME/.local/share/uv/tools/hermes-agent/lib/python3.13/site-packages` 跑 pytest，或由 planner main-loop 在有网络/缓存环境中先安装 `pytest-asyncio`。
+
+## Executor's Reading (reopen attempt 2026-06-19)
+### What I'll do
+- 用户已明确“允许重新打开028”；我将跳过再次联网安装，直接用现有 conda 环境和 Hermes site-packages PYTHONPATH 跑 H028 的 3 个 mock pytest，再根据结果修正当前 package 骨架或完成记录。
+
+### Assumptions made
+- [MED] 上轮 blocked 根因是 PyPI DNS，不是代码/依赖缺失；当前 conda 环境已经能跑 `pytest-asyncio`（openai-shim 11 测刚通过），因此可跳过 `uv pip install` 直接跑本包 pytest。
+- [LOW] 继续遵守 H028 scope：不真装 plugin，不跑 Hermes，不改 M1/M2/M4/ESP32。
+
+## What I Did (reopen attempt 2026-06-19)
+- 已跳过联网 install，直接用现有环境跑 H028 mock pytest。
+
+Command:
+
+```bash
+cd hermes-xiaozhi-plugin
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+PYTHONPATH="src:$HOME/.local/share/uv/tools/hermes-agent/lib/python3.13/site-packages" \
+  /home/kk/miniconda3/bin/python -m pytest -xvs tests/
+```
+
+Output:
+
+```text
+============================= test session starts ==============================
+platform linux -- Python 3.13.9, pytest-9.1.0, pluggy-1.5.0 -- /home/kk/miniconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /home/kk/code/robot_class/final_pro_xiaozhi_robot/hermes-xiaozhi-plugin
+configfile: pyproject.toml
+plugins: anyio-4.14.0, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 3 items
+
+tests/test_adapter_send.py::test_adapter_send_returns_success_without_mcp_url PASSED
+tests/test_adapter_send.py::test_adapter_send_posts_to_mcp_url_when_set PASSED
+tests/test_register.py::test_register_calls_ctx_register_platform PASSED
+
+============================== 3 passed in 0.37s ===============================
+```
+
+- `git status --short` at that point:
+
+```text
+ M docs/handoffs/active/2026-06-19-m3-hermes-plugin-spike-028.md
+?? hermes-xiaozhi-plugin/
+```
+
+- `find hermes-xiaozhi-plugin -maxdepth 3 -type f | sort` showed pytest-generated cache files under the new package:
+
+```text
+hermes-xiaozhi-plugin/.pytest_cache/.gitignore
+hermes-xiaozhi-plugin/.pytest_cache/CACHEDIR.TAG
+hermes-xiaozhi-plugin/.pytest_cache/README.md
+hermes-xiaozhi-plugin/README.md
+hermes-xiaozhi-plugin/pyproject.toml
+hermes-xiaozhi-plugin/src/hermes_xiaozhi/__init__.py
+hermes-xiaozhi-plugin/src/hermes_xiaozhi/adapter.py
+hermes-xiaozhi-plugin/src/hermes_xiaozhi/plugin.yaml
+hermes-xiaozhi-plugin/tests/__pycache__/test_adapter_send.cpython-313-pytest-9.1.0.pyc
+hermes-xiaozhi-plugin/tests/__pycache__/test_register.cpython-313-pytest-9.1.0.pyc
+hermes-xiaozhi-plugin/tests/test_adapter_send.py
+hermes-xiaozhi-plugin/tests/test_register.py
+```
+
+- I attempted to clean those generated cache directories, but the environment rejected the cleanup command before shell execution. Per the project rule “任何步骤报错立即 status: blocked + 完整 stderr 贴 What I Did”, I stopped here and set H028 back to `blocked`.
+
+Rejected cleanup command:
+
+```bash
+rm -rf hermes-xiaozhi-plugin/.pytest_cache hermes-xiaozhi-plugin/tests/__pycache__
+```
+
+Full tool error:
+
+```text
+exec_command failed for `/bin/bash -lc 'rm -rf hermes-xiaozhi-plugin/.pytest_cache hermes-xiaozhi-plugin/tests/__pycache__'`: CreateProcess { message: "Rejected(\"`/bin/bash -lc 'rm -rf hermes-xiaozhi-plugin/.pytest_cache hermes-xiaozhi-plugin/tests/__pycache__'` rejected: blocked by policy\")" }
+```
+
+## Open Questions for Planner / User (reopen attempt 2026-06-19)
+- H028 package tests are passing, but pytest cache files remain in the untracked package directory because cleanup with `rm -rf` was rejected by environment policy. Please confirm whether to reopen H028 and allow cleanup via a non-`rm -rf` method, or leave cache files ignored/untracked for planner cleanup.
+
+## Planner Unblock — 2026-06-19 (cosmetic cleanup per ADR-0003 II)
+
+Codex Stage A 跑通 **3/3 PASS in 0.37s**，但卡在两个 cosmetic：
+1. PyPI DNS 失败 → reopen 后用现成 conda env (PYTHONPATH inject) 跑通
+2. `rm -rf` 被 sandbox policy 拒 → planner main-loop 清
+
+### What I Did
+
+- 清掉 codex 留下的 pytest cache:
+  ```
+  hermes-xiaozhi-plugin/.pytest_cache/
+  hermes-xiaozhi-plugin/tests/__pycache__/
+  hermes-xiaozhi-plugin/src/hermes_xiaozhi/__pycache__/
+  ```
+- 确认根 `.gitignore` 已含 `__pycache__/`，无需额外加规则
+- 确认 7 个 artifact 文件全部就位:
+  ```
+  hermes-xiaozhi-plugin/
+  ├── pyproject.toml        386 B
+  ├── README.md            1806 B
+  ├── src/hermes_xiaozhi/
+  │   ├── __init__.py
+  │   ├── adapter.py
+  │   └── plugin.yaml
+  └── tests/
+      ├── test_register.py
+      └── test_adapter_send.py
+  ```
+
+### AC verification
+
+| AC | 结果 |
+|---|---|
+| pyproject.toml 按模板 | ✅ |
+| plugin.yaml 按模板 (kind=platform) | ✅ |
+| __init__.py 导出 register | ✅ |
+| adapter.py 4 abstract method + register(ctx) | ✅ |
+| 3 pytest case (register + send-no-mcp + send-with-mcp) | ✅ |
+| README ≤80 行 | ✅ |
+| `pytest -xvs tests/` 3/3 PASS | ✅ (0.37s) |
+| 不真装 plugin / 不跑 hermes / 不改 M1/M2/M4 | ✅ |
+
+### Next
+
+- **H028.bis** (user-led, 半天)：装 plugin 到 `~/.hermes/plugins/xiaozhi/`
+  + `hermes gateway run` 看 platform 注册日志 + 切 shim env 指 plugin
+  webhook + ESP32 voice 真 spawn `[xiaozhi]` session
+- **H029** (codex sandbox, 1 天)：M1 加 `show_text_proxy(device_id, text, kind)`
+  stdio MCP tool + adapter.send 真走 M1 → ESP32 show_text；e2e `hermes -p
+  "对机器人说嗨" --platform xiaozhi` → 屏幕弹"嗨"
+
+### Bitter lesson (待回灌 H027)
+
+**#17 codex sandbox 同时被 PyPI DNS + `rm -rf` policy 双卡**：handoff
+Suggested Steps 写"装 deps"时，应注明 "若 DNS 失败可用 PYTHONPATH
+existing env 跑"；handoff Constraints 写"cleanup 不能 rm" 让 codex
+不要尝试。已记 H027 backlog。
+

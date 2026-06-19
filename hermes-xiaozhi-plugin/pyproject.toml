@@ -1,0 +1,18 @@
+[project]
+name = "hermes-xiaozhi-plugin"
+version = "0.1.0"
+requires-python = ">=3.8"
+dependencies = ["httpx>=0.27"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hermes_xiaozhi"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
