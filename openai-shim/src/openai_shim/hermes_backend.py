@@ -1,6 +1,9 @@
 """Hermes transcript fork backend."""
 
 import asyncio
+import hashlib
+import hmac
+import json
 import logging
 import time
 import uuid
@@ -43,10 +46,12 @@ class HermesBackend:
         inner: Optional[TextBackend] = None,
         transcript_url: Optional[str] = None,
         http_client: Optional[httpx.AsyncClient] = None,
+        webhook_secret: Optional[str] = None,
     ) -> None:
         self.inner = inner or EchoBackend()
         self.transcript_url = transcript_url
         self.http_client = http_client
+        self.webhook_secret = webhook_secret
         self._inflight_tasks: Set[asyncio.Task] = set()
 
     async def stream_response(
@@ -77,11 +82,33 @@ class HermesBackend:
 
     async def _post_transcript(self, payload: dict) -> None:
         try:
+            body_bytes = json.dumps(
+                payload,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode()
+            headers = {}
+            if self.webhook_secret:
+                sig = hmac.new(
+                    self.webhook_secret.encode(),
+                    body_bytes,
+                    hashlib.sha256,
+                ).hexdigest()
+                headers = {"X-Hub-Signature-256": f"sha256={sig}"}
+
             if self.http_client is not None:
-                response = await self.http_client.post(self.transcript_url, json=payload)
+                response = await self.http_client.post(
+                    self.transcript_url,
+                    content=body_bytes,
+                    headers=headers,
+                )
             else:
                 async with httpx.AsyncClient(timeout=5.0) as client:
-                    response = await client.post(self.transcript_url, json=payload)
+                    response = await client.post(
+                        self.transcript_url,
+                        content=body_bytes,
+                        headers=headers,
+                    )
             response.raise_for_status()
         except asyncio.CancelledError as exc:
             LOG.warning("Hermes transcript fork cancelled: %s", exc)

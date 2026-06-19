@@ -48,7 +48,8 @@ def _build_backend() -> TextBackend:
 
     transcript_url = os.environ.get("HERMES_TRANSCRIPT_URL")
     if transcript_url:
-        return HermesBackend(inner, transcript_url)
+        webhook_secret = os.environ.get("HERMES_WEBHOOK_SECRET")
+        return HermesBackend(inner, transcript_url, webhook_secret=webhook_secret)
     return inner
 
 

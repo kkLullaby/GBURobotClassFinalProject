@@ -1,11 +1,13 @@
 import asyncio
+import hashlib
+import hmac
 
 import httpx
 import pytest
 from fastapi import FastAPI, Request, Response
 from openai import AsyncOpenAI
 
-from openai_shim.app import app, get_backend
+from openai_shim.app import _build_backend, app, get_backend
 from openai_shim.echo_backend import EchoBackend
 from openai_shim.hermes_backend import HermesBackend
 
@@ -48,6 +50,22 @@ async def _wait_for_inflight(backend):
         await asyncio.gather(*list(backend._inflight_tasks), return_exceptions=True)
 
 
+def _build_test_backend(monkeypatch, hermes_client, secret=None):
+    monkeypatch.delenv("OPENAI_SHIM_BACKEND", raising=False)
+    monkeypatch.delenv("HERMES_WEBHOOK_SECRET", raising=False)
+    monkeypatch.setenv(
+        "HERMES_TRANSCRIPT_URL",
+        "http://fake-hermes/webhooks/xiaozhi-transcript",
+    )
+    if secret is not None:
+        monkeypatch.setenv("HERMES_WEBHOOK_SECRET", secret)
+
+    backend = _build_backend()
+    assert isinstance(backend, HermesBackend)
+    backend.http_client = hermes_client
+    return backend
+
+
 @pytest.mark.asyncio
 async def test_transcript_posted_when_hermes_url_set():
     received = []
@@ -88,6 +106,93 @@ async def test_transcript_posted_when_hermes_url_set():
     assert body["model"] == "echo"
     assert body["session"].startswith("chatcmpl-")
     assert isinstance(body["timestamp_unix"], int)
+
+
+@pytest.mark.asyncio
+async def test_hmac_signature_added_when_secret_set(monkeypatch):
+    secret = "testsecret123"
+    received = []
+    fake_hermes = FastAPI()
+
+    @fake_hermes.post("/webhooks/xiaozhi-transcript")
+    async def receive_transcript(request: Request):
+        body = await request.body()
+        received.append(
+            {
+                "body": body,
+                "header": request.headers.get("x-hub-signature-256"),
+            }
+        )
+        return {"ok": True}
+
+    hermes_client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=fake_hermes),
+        base_url="http://fake-hermes",
+    )
+    backend = _build_test_backend(monkeypatch, hermes_client, secret=secret)
+    app.dependency_overrides[get_backend] = _override_backend(backend)
+    try:
+        async with hermes_client:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://testserver",
+            ) as http_client:
+                content = await _collect_stream(_openai_client(http_client))
+
+            await _wait_for_inflight(backend)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert content == "echoed: hi"
+    assert len(received) == 1
+    expected_sig = hmac.new(
+        secret.encode(),
+        received[0]["body"],
+        hashlib.sha256,
+    ).hexdigest()
+    assert hmac.compare_digest(
+        received[0]["header"],
+        f"sha256={expected_sig}",
+    )
+
+
+@pytest.mark.asyncio
+async def test_no_hmac_when_secret_unset(monkeypatch):
+    received = []
+    fake_hermes = FastAPI()
+
+    @fake_hermes.post("/webhooks/xiaozhi-transcript")
+    async def receive_transcript(request: Request):
+        received.append(
+            {
+                "body": await request.body(),
+                "header": request.headers.get("x-hub-signature-256"),
+            }
+        )
+        return {"ok": True}
+
+    hermes_client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=fake_hermes),
+        base_url="http://fake-hermes",
+    )
+    backend = _build_test_backend(monkeypatch, hermes_client)
+    app.dependency_overrides[get_backend] = _override_backend(backend)
+    try:
+        async with hermes_client:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://testserver",
+            ) as http_client:
+                content = await _collect_stream(_openai_client(http_client))
+
+            await _wait_for_inflight(backend)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert content == "echoed: hi"
+    assert len(received) == 1
+    assert received[0]["header"] is None
+    assert received[0]["body"]
 
 
 @pytest.mark.asyncio

@@ -68,6 +68,20 @@ When the env var is set, the shim posts `{user, assistant, model, session,
 timestamp_unix}` to Hermes after each streamed response. The fork is
 fire-and-forget: Hermes failures are logged and do not break the SSE response.
 
+## H025 Webhook HMAC
+
+Hermes webhook subscriptions return a secret when you run
+`hermes webhook subscribe xiaozhi-transcript ...`. Pass that value at shim
+startup:
+
+```bash
+HERMES_WEBHOOK_SECRET='<secret from hermes webhook subscribe>'
+```
+
+When set, the shim signs transcript POST bodies with
+`X-Hub-Signature-256: sha256=<hex>`. When unset, it sends no HMAC header so
+older mocks and unsigned test webhooks keep working. Do not commit real secrets.
+
 ## H021 DeepSeek Backend
 
 Backend selection is explicit:

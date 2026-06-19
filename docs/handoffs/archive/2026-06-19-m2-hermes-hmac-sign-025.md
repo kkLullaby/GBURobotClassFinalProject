@@ -4,7 +4,7 @@ from: planner
 to: executor
 parent: 2026-06-19-real-hermes-transcript-handshake-020
 supersedes:
-status: pending
+status: done
 created: 2026-06-19
 artifacts:
   - openai-shim/src/openai_shim/hermes_backend.py (改：加 HMAC 签名)
@@ -191,3 +191,84 @@ git status --short
   v2 polish 再说
 - demo 答辩用 deliver-only 模式（webhook 直接走 telegram channel,
   0 LLM cost + 视觉好）？— 可作为 H026 polish item
+
+## Executor's Reading
+### What I'll do
+- 在 `openai-shim` 的 Hermes transcript fork 路径里加入可选 `HERMES_WEBHOOK_SECRET` HMAC 签名，保持无 secret 时不签的兼容行为，并用 fake-Hermes ASGI 测试覆盖签名存在和不存在两条路径。
+
+### Assumptions made
+- [LOW] 当前 `openai-shim/` 已包含 H019/H021 的实现，H025 在这些文件上增量修改，不回滚既有未提交变更。
+- [LOW] H025 明确“不发 auditor”，因此完成后只在当前 handoff 追加 What I Did，不新建 auditor handoff。
+- [LOW] README 在已有 H019/H021 段后追加 H025 HMAC 小节即可；不改 Hermes CLI 或真 secret 配置。
+- [LOW] 测试中 fake-Hermes 会直接校验收到的 raw body bytes 和 header；生产代码和测试都使用同一套 HMAC 算法，但不共享实现函数，避免测试只复制 bug。
+
+## What I Did
+- Modified `openai-shim/src/openai_shim/hermes_backend.py`:
+  - added stdlib `hmac`, `hashlib`, and deterministic `json.dumps(..., separators=(",", ":"), ensure_ascii=False)` body serialization.
+  - added optional `webhook_secret`.
+  - changed Hermes POST from `json=payload` to `content=body_bytes, headers=headers`.
+  - adds `X-Hub-Signature-256: sha256=<hex>` only when `webhook_secret` is set; otherwise sends no HMAC header.
+- Modified `openai-shim/src/openai_shim/app.py`:
+  - reads `HERMES_WEBHOOK_SECRET`.
+  - passes it to `HermesBackend(inner, transcript_url, webhook_secret=webhook_secret)`.
+- Modified `openai-shim/tests/test_hermes_fork.py`:
+  - added `test_hmac_signature_added_when_secret_set`.
+  - added `test_no_hmac_when_secret_unset`.
+  - both tests use fake-Hermes ASGI and trigger through the OpenAI SDK stream path.
+- Modified `openai-shim/README.md`:
+  - added `H025 Webhook HMAC` section with env var, subscribe-secret source, compatibility note, and no real secret.
+- Did not run `hermes` CLI, did not touch `~/.hermes/`, did not touch ESP32/docker/mcp-endpoint, did not add dependencies, and did not implement secret rotation / timestamp replay prevention / HMAC algorithm selection.
+
+Test command:
+
+```bash
+cd openai-shim
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy HERMES_TRANSCRIPT_URL HERMES_WEBHOOK_SECRET OPENAI_SHIM_BACKEND DEEPSEEK_API_KEY DEEPSEEK_BASE_URL
+/home/kk/miniconda3/bin/python -m pytest -xvs tests/
+```
+
+Output:
+
+```text
+============================= test session starts ==============================
+platform linux -- Python 3.13.9, pytest-9.1.0, pluggy-1.5.0 -- /home/kk/miniconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /home/kk/code/robot_class/final_pro_xiaozhi_robot/openai-shim
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.12.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 11 items
+
+tests/test_chat_completions.py::test_streaming_echo_roundtrip PASSED
+tests/test_chat_completions.py::test_non_streaming_returns_503 PASSED
+tests/test_deepseek_backend.py::test_deepseek_backend_yields_real_stream_chunks PASSED
+tests/test_deepseek_backend.py::test_hermes_wraps_deepseek_forks_real_assistant_text PASSED
+tests/test_deepseek_backend.py::test_build_backend_with_env_matrix PASSED
+tests/test_deepseek_backend.py::test_deepseek_api_error_propagates PASSED
+tests/test_hermes_fork.py::test_transcript_posted_when_hermes_url_set PASSED
+tests/test_hermes_fork.py::test_hmac_signature_added_when_secret_set PASSED
+tests/test_hermes_fork.py::test_no_hmac_when_secret_unset PASSED
+tests/test_hermes_fork.py::test_sse_still_works_when_hermes_returns_500 PASSED
+tests/test_hermes_fork.py::test_no_fork_when_hermes_url_unset PASSED
+
+============================== 11 passed in 3.38s ==============================
+```
+
+`git status --short`:
+
+```text
+ M docs/handoffs/active/2026-06-19-m2-hermes-hmac-sign-025.md
+ M docs/handoffs/active/2026-06-19-m4-implement-show-emoji-and-text-024.md
+ m esp/xiaozhi-esp32
+ M openai-shim/README.md
+ M openai-shim/src/openai_shim/app.py
+ M openai-shim/src/openai_shim/hermes_backend.py
+ M openai-shim/tests/test_hermes_fork.py
+```
+
+Notes:
+- H025-owned changes are the current handoff plus the four `openai-shim/` files listed above.
+- `docs/handoffs/active/2026-06-19-m4-implement-show-emoji-and-text-024.md` and `esp/xiaozhi-esp32` are pre-existing H024 dirty state and were not modified for H025.
+
+## Open Questions for Auditor
+- None. H025 explicitly says no auditor handoff; M2 batch review is deferred.
