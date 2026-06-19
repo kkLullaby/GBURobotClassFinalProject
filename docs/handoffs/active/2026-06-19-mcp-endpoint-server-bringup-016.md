@@ -245,3 +245,219 @@ missing-mcp-endpoint-server
 
 ## Open Questions for Planner/User
 - 需要在有 docker/netlink/仓库外写权限/ESP32 物理访问的用户主终端继续 H016。建议直接照 H016 Suggested Steps 跑；M1 pipe 启动命令使用 shared/global-commands 记录的 conda Python：`/home/kk/miniconda3/bin/python -m xiaozhi_mcp_adapter.pipe`。
+
+## Retry What I Did (executor, 2026-06-19)
+- 用户再次给出 H016 路径后，已重新读取 handoff INDEX 和 H016 当前内容。
+- 当前 H016 frontmatter 已是 `status: blocked`；按 status 只前进不后退纪律，未把状态改回 `pending` 或 `claimed`。
+- 重新做最小 pre-flight，确认当前 Codex sandbox 权限仍未变化：不能访问 docker daemon / netlink，`/home/kk/code/xinnan-tech` 不可写，`mcp-endpoint-server` 仍不存在。
+- 未 clone、未改仓库外 config、未启动/停止容器、未运行 M1 pipe、未触碰 ESP32。
+- 当前 `docs/handoffs/INDEX.md` 仍把 H016 写成 pending，与 handoff frontmatter `blocked` 不一致；INDEX 维护属于 planner/hook 地盘，本次未修改。
+- 本次重试后的 `git status --short`：
+
+```text
+ ? esp/xiaozhi-esp32
+```
+
+- 完整 stderr / command output：
+
+```text
+$ docker ps --format '{{.Names}} {{.Status}} {{.Ports}}'
+permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
+```
+
+```text
+$ ss -tln | grep -E ':8004\b' || true
+Cannot open netlink socket: Operation not permitted
+```
+
+```text
+$ ip addr show | grep -E 'inet 10\.|inet 192\.|inet 172\.(16|17|18|19|2[0-9]|3[01])\.' | grep -v 'docker\|br-\|veth' | head -3
+Cannot open netlink socket: Operation not permitted
+```
+
+```text
+$ test -w /home/kk/code/xinnan-tech && echo writable || echo not-writable
+not-writable
+```
+
+```text
+$ test -d /home/kk/code/xinnan-tech/mcp-endpoint-server && git -C /home/kk/code/xinnan-tech/mcp-endpoint-server log -1 --format='%H %s' || echo missing-mcp-endpoint-server
+missing-mcp-endpoint-server
+```
+
+## Planner Unblock — Stage A/B/C (2026-06-19, main-loop per ADR-0003 II)
+
+Codex sandbox 二度阻塞（docker/netlink/仓库外写）。Planner main-loop 有
+docker daemon + LAN + 仓库外写 + proxy，但**没有 ESP32 物理访问**（且 wifi
+已从 H1b 的 `10.206.218.66` 换到 `10.2.244.38`，ESP32 内 OTA URL 仍指旧 IP）。
+所以代跑 A/B/C 三段（机器侧链路），Stage D（ESP32 voice）必须留给 user。
+
+### Stage A — mcp-endpoint-server 部署 ✅
+
+```
+$ cd /home/kk/code/xinnan-tech && git clone --depth=1 \
+    https://github.com/xinnan-tech/mcp-endpoint-server.git
+$ cd mcp-endpoint-server && git log -1 --format='%H %s'
+0f9302f327100fb976c7bdea6e4ebbb8ebdb5787 Merge pull request #12 from xinnan-tech/more-server
+
+$ docker compose up -d
+[+] Pull / Create / Start ...
+mcp-endpoint-server  Up 6s  0.0.0.0:8004->8004/tcp
+
+$ ss -tln | grep ':8004'
+LISTEN 0  4096  0.0.0.0:8004  0.0.0.0:*
+
+$ docker logs mcp-endpoint-server  # （color stripped）
+INFO  启动MCP Endpoint Server: 0.0.0.0:8004
+INFO  ===== 下面的地址分别是智控台/多模块MCP接入点地址====
+INFO  智控台MCP参数配置: http://172.20.0.2:8004/mcp_endpoint/health?key=<KEY>
+INFO  单模块部署MCP接入点: ws://172.20.0.2:8004/mcp_endpoint/mcp/?token=<TOKEN>
+INFO  多模块部署MCP接入点: ws://172.20.0.2:8004/mcp_endpoint/mcp/?token=<TOKEN>
+INFO  Application startup complete.
+INFO  Uvicorn running on http://0.0.0.0:8004
+```
+
+替换 container IP `172.20.0.2` → LAN IP `10.2.244.38`，curl health 验：
+
+```
+$ curl -sS "http://10.2.244.38:8004/mcp_endpoint/health?key=<KEY>"
+{"result":{"status":"success","message":"ok"},"error":null,"id":null,"jsonrpc":"2.0"}
+```
+
+Token len 46 含尾部 `%3D` (URL-encoded `=`)，**保留 raw form**——pipe / config
+都直接拼这串就好（curl WS upgrade 实测可直接吃，不要二次 unquote）。
+
+### Stage B — xiaozhi-server 配 mcp_endpoint + restart ✅
+
+```
+$ CONFIG=~/code/xinnan-tech/xiaozhi-esp32-server/main/xiaozhi-server/data/.config.yaml
+$ cp $CONFIG ${CONFIG}.bak.h016   # 备份
+$ printf '\nmcp_endpoint: ws://10.2.244.38:8004/mcp_endpoint/mcp/?token=<TOKEN>\n' >> $CONFIG
+$ grep -E 'mcp_endpoint' $CONFIG
+mcp_endpoint: ws://10.2.244.38:8004/mcp_endpoint/mcp/?token=<TOKEN>
+
+$ cd ~/code/xinnan-tech/xiaozhi-esp32-server/main/xiaozhi-server
+$ docker compose restart xiaozhi-esp32-server
+Container xiaozhi-esp32-server  Started
+
+$ docker logs xiaozhi-esp32-server | grep -E 'mcp接入点|OTA|Websocket'  # 颜色已 strip
+INFO  OTA接口是		http://172.19.0.2:8003/xiaozhi/ota/
+INFO  视觉分析接口是	http://172.19.0.2:8003/mcp/vision/explain
+INFO  mcp接入点是	ws://10.2.244.38:8004/mcp_endpoint/mcp/?token=<TOKEN>
+INFO  Websocket地址是	ws://172.19.0.2:8000/xiaozhi/v1/
+```
+
+`mcp接入点是` 命中 = config 生效。
+
+### Stage C — M1 pipe 真连 ✅
+
+第一次跑卡在 `did not receive a valid HTTP response`：
+
+```
+2026-06-19 14:37:31 WARNING xiaozhi_mcp_adapter.pipe: MCP endpoint connection
+  failed: did not receive a valid HTTP response; reconnecting in 0.92s
+```
+
+**根因**：`ALL_PROXY=socks://127.0.0.1:7897` 等代理 env 让 `websockets` 库
+（或下游 `python-socks`）把请求送到 socks 隧道，目标 `10.2.244.38` 其实
+**应该走直连**（被 `NO_PROXY` 覆盖的网段，但 `websockets` 库历史上不读 NO_PROXY）。
+
+修法：连之前 `unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy`。
+
+修后：
+
+```
+$ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+$ MCP_ENDPOINT="ws://10.2.244.38:8004/mcp_endpoint/mcp/?token=<TOKEN>" \
+    PYTHONUNBUFFERED=1 /home/kk/miniconda3/bin/python -u -m xiaozhi_mcp_adapter.pipe
+
+INFO xiaozhi_mcp_adapter.pipe: starting child process: ... echo_tool
+INFO xiaozhi_mcp_adapter.pipe: connected to MCP endpoint: ws://10.2.244.38:...
+```
+
+mcp-endpoint-server 反向看到注册：
+
+```
+INFO  ('10.2.244.38', 46976) - "WebSocket /mcp_endpoint/mcp/?token=<TOKEN>" [accepted]
+INFO  MCP服务器连接已注册: single_module (UUID: 851d6fbb-390f-4c16-a616-a019b1b6012c)
+INFO  MCP服务器连接已建立: single_module (UUID: 851d6fbb-...)
+INFO  connection open
+```
+
+### Stage D — ESP32 voice 测试 ⏸️ 留 user
+
+Planner 不能跑：
+- 没有物理 ESP32 在手
+- ESP32 内置 OTA URL 仍指 H1b 时的 `10.206.218.66`（旧 wifi 段），
+  当前 wifi 是 `10.2.244.38` 段——ESP32 开机连不上 OTA 也连不上 server
+- 解法：要么换回 H1b 的 wifi（router 还在的话）；要么重烧 OTA URL；
+  要么进 BluFi 重配 wifi + 等 OTA 推新 server URL
+
+**User 接手时**：
+
+1. 让 ESP32 能连上当前 LAN（或换 server 的 LAN 配回 ESP32 已认得的段）
+2. 主终端开两个 tab：
+   - tab A: `cd ~/code/robot_class/final_pro_xiaozhi_robot/xiaozhi-mcp-adapter && \
+        source /tmp/h016-env.sh && \
+        unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy && \
+        MCP_ENDPOINT="ws://$HOST_IP:8004/mcp_endpoint/mcp/?token=$TOKEN" \
+        PYTHONUNBUFFERED=1 /home/kk/miniconda3/bin/python -u -m xiaozhi_mcp_adapter.pipe`
+   - tab B: `docker logs -f xiaozhi-esp32-server 2>&1 | grep -iE 'tool|mcp|echo'`
+3. 对机器说："**调用 echo 工具，参数 hi**"
+4. 看 tab A pipe log：期望 `tools/list` → `tools/call echo {"text":"hi"}` →
+   echo_tool stdout 回 `"echoed: hi"`
+5. 听喇叭：LLM 把 `echoed: hi` 朗读或解释
+
+如果 LLM **没主动调** echo：是 LLM 倾向问题，**不是 H016 失败**——记 Open
+Question 给 planner 回灌 ADR-0005。
+
+### AC verification 部分汇总
+
+| AC | 验证 | 结果 |
+|---|---|---|
+| mcp-endpoint-server clone (commit 留痕) | A.1 | ✅ `0f9302f` |
+| `docker compose up -d` + `:8004` LISTEN | A.2/A.3 | ✅ |
+| 2 个 URL 抽出 (智控台 + 单模块) | A.4 | ✅ KEY len 32 / TOKEN len 46 |
+| health endpoint JSON | A.5 | ✅ `{"status":"success","message":"ok"}` |
+| `mcp_endpoint:` 入 server config + restart | B.1/B.2 | ✅ |
+| logs 出现 `mcp接入点是` | B.3 | ✅ |
+| M1 pipe `connected to MCP endpoint:` | C.1 | ✅ |
+| `tools/call` echo + `echoed: hi` result | D | ⏸️ user |
+| xiaozhi-server logs 同含 tool result | D | ⏸️ user |
+| ESP32 喇叭朗读 | D | ⏸️ user |
+| memo 贴回 | D | ⏸️ user |
+
+机器侧 9/13 AC ✅；物理侧 4 个 AC 留 user。
+
+### Files touched
+
+- 改 `~/code/xinnan-tech/xiaozhi-esp32-server/.../data/.config.yaml` (加 mcp_endpoint)
+  备份在 `.config.yaml.bak.h016`，**仓库外**
+- 新 clone `~/code/xinnan-tech/mcp-endpoint-server/`，**仓库外**
+- 新建 `/tmp/h016-env.sh`（含 HOST_IP / KEY / TOKEN，不入库；user 跑 D 段可 source）
+- 改本 handoff
+- 待：`docs/handoffs/INDEX.md` 同步 status
+
+### Bonus 观察 / 待回灌项
+
+1. **proxy env 杀 websockets**：`ALL_PROXY=socks://...` 让 M1 pipe 连本地 LAN
+   失败。M1 pipe 应在 README / 在 pipe.py 顶部 docstring 加一句"运行前
+   `unset ALL_PROXY` 或在 systemd unit `Environment=NO_PROXY=10.0.0.0/8`"。
+   → 待回灌 `xiaozhi-mcp-adapter/README.md` + `shared/global-commands.md`
+   §Python 桥接服务
+2. **wifi 段一变 ESP32 就死**：固件硬编码 OTA URL = `http://10.206.218.66:8003/...`
+   烧死在 flash 里；换 wifi 后必须重配。**Demo 答辩日**绝对要保 wifi 段稳定
+   或前一晚重烧。→ 写进 `docs/demo-script.md` pre-flight checklist
+3. **mcp-endpoint-server 8004 vs 8003 OTA 端口不冲突**：8003 是 xiaozhi-server
+   OTA，8004 是 mcp-endpoint 独立服务，共存 OK
+4. **token 含 `%3D`**：用 raw string 拼即可（curl/websockets 都吃）；**不要**
+   `urllib.parse.unquote()` 后再拼，server 端会 401
+5. **health endpoint 只回 ok**：当前版本不暴露 connections 计数 / 名单 →
+   debug 时只能看 `docker logs mcp-endpoint-server` 反向看连接事件
+6. **mcp-endpoint-server image 默认从 ghcr.nju.edu.cn**（南京大学镜像），
+   不走 GitHub Container Registry，国内用户拉得动；记一笔到 shared/
+
+### Bitter lesson 候选
+
+- **环境 env**：`unset` 时机要在 *launch 子进程之前*；本仓库的 spike scripts
+  以后默认得在 startup banner 里 echo proxy state，否则同样的卡 30s 重现

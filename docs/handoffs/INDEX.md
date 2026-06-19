@@ -11,7 +11,8 @@ Last compacted: 2026-06-19
 
 ## Active (status: pending|claimed|blocked)
 
-- [2026-06-19-mcp-endpoint-server-bringup-016](active/2026-06-19-mcp-endpoint-server-bringup-016.md) planner → **user** (pending, ~25 min): "起 xinnan-tech mcp-endpoint-server (port 8004) + 配进 xiaozhi-server + 真 M1 pipe round-trip + ESP32 voice 调 echo tool" — M1 spike 升级真链路
+- [2026-06-19-mcp-endpoint-server-bringup-016](active/2026-06-19-mcp-endpoint-server-bringup-016.md) planner → **user** (blocked, Stage A/B/C done by planner main-loop, Stage D ESP32 voice 留 user): "起 xinnan-tech mcp-endpoint-server (port 8004) + 配进 xiaozhi-server + 真 M1 pipe round-trip + ESP32 voice 调 echo tool" — **9/13 AC 已 ✅**：mcp-endpoint up + KEY/TOKEN extracted + xiaozhi-server config 含 `mcp接入点是 ws://10.2.244.38:8004/...` + M1 pipe `connected to MCP endpoint` + mcp-endpoint 反向看到 register。剩 4 AC 物理段：用户重连 wifi / ESP32 OTA 段对齐后 voice 测；bonus discoveries: `ALL_PROXY=socks` 杀 websockets / wifi 段变 ESP32 死 / token `%3D` 保 raw
+- [2026-06-19-m2-hermes-fork-transcript-019](active/2026-06-19-m2-hermes-fork-transcript-019.md) planner → executor (pending, **可交 coding agent / sandbox-friendly**): "M2 fork transcript 给 Hermes (HermesBackend 包 EchoBackend + httpx POST + fake-hermes ASGI mock 测)" — ADR-0005 主线收尾，**与 H016 互不阻塞**，跑通即 demo §1 可演
 
 ## Recent done / archived (last 7 days)
 
