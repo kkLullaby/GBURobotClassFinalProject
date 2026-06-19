@@ -214,6 +214,18 @@ doc 推断、跳过提问），确认这是个：
     - 演示场景二涉及"代念发言"时屏幕必须同步显示字幕
     - 出处：architecture §8
 
+13. **写 handoff/命令清单时不要凭"上一个项目的默认"写串口设备名**（H1b 教训, 2026-06-19）
+    - H1b handoff Stage C 默认写 `/dev/ttyUSB0`，实际 OttoRobot 是
+      `/dev/ttyACM0`（ESP32-S3 内置 USB-OTG，非 CH340/CP210x 外挂芯片）
+    - 用户严格按 handoff 跑就触发 `Could not open /dev/ttyUSB0: No such file
+      or directory`，浪费一轮 round-trip
+    - **教训**：handoff 里凡是"具体硬件路径 / 端口号 / 命令行参数"必须
+      **要么从 [shared/global-commands](../../.claude/memory/shared/global-commands.md)
+      里 quote、要么标记"待 user 实测确认"**——planner 不能凭印象写
+    - 触发对 ADR-0001 §纪律 1（"每个假设打 LOW/MED/HIGH 标签"）的隐含违反：
+      "用 ttyUSB0" 本质是 LOW 但写成了"事实"，应该写 LOW 假设让 executor 校核
+    - 出处：H1b §Open Questions ④
+
 ### 演化时机
 
 新踩坑请在事件发生时追加到本节末尾，**不要静默修改既有条目**；

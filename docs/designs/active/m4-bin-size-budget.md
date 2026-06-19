@@ -58,6 +58,22 @@ idf.py size-files | grep otto-robot      # 看 OTTO_ROBOT 板自己加了多少
 
 CI 化（可选，M4 进入后再考虑）：跑 build，grep `binary size 0x`，断言 < 0x3a0000。
 
+## Runtime heap budget（TODO — M4 开工前补）
+
+binary size 是**静态**约束；runtime heap free 是**动态**约束。两者都要盯。
+
+```bash
+# H1b done 后任意 monitor session 头几秒会出现：
+#   I (xxx) heap_init: Initial heap free: <N> bytes
+# H014 跑时漏抓，M4 开工前 single-run 一次回填：
+idf.py -p /dev/ttyACM0 monitor | grep -E 'heap_init|Free heap'
+# 抓到后写进本文档"Baseline"段，并加 M4 RTOS task 栈预算
+```
+
+预期：ESP32-S3 16 MB flash / 8 MB PSRAM (OttoRobot 板)，runtime heap free
+应该 > 200 KB 起步。M4 加 1-2 个 task（含栈 ~8-16 KB each）问题不大；加 5+
+就要算。
+
 ## Why this lives in designs/ not contracts/
 
 - 这是设计约束，不是跨栈接口

@@ -46,7 +46,23 @@ EOF
 
 # 日常
 idf.py build               # 全冷 ~7 min；含 ~150 个 managed_components pull
-idf.py flash monitor       # Ctrl+] 退出 monitor
+idf.py -p /dev/ttyACM0 flash monitor   # OttoRobot 是 ttyACM0 (USB-OTG)，不是 ttyUSB0
+
+# ──────────────────────────────────────────────────────────────
+# 串口 / 烧录踩过的坑（H1b 实测 2026-06-19）：
+# ──────────────────────────────────────────────────────────────
+# 1. ESP32-S3 OttoRobot 用内置 USB-OTG → 串口是 /dev/ttyACM0
+#    不是 /dev/ttyUSB0（那是 CH340/CP210x 外挂芯片用的）
+#    先 `ls /dev/ttyACM* /dev/ttyUSB*` 看你到底是哪个
+# 2. flash 完后 ESP32 会卡在
+#       rst:0x15 (USB_UART_CHIP_RESET),boot:0x0 (DOWNLOAD)
+#       waiting for download
+#    这不是错，是 boot 没切回 normal mode。**按板上 RST 键**让它重启进 boot
+#    （不要 Ctrl+] 退 monitor，保持 monitor 开着按 RST 看 boot 日志最快）
+# 3. 首次 boot 没配过 wifi → 卡 BluFi/SoftAP 配网
+#    用手机 ESP-Touch / BluFi app（小米/小度类似）连蓝牙，传 SSID + 密码
+#    上游流程见 esp/xiaozhi-esp32/docs/blufi_zh.md
+# 4. monitor 退出：Ctrl + ]（不是 Ctrl + C；后者会发 SIGINT 给 idf.py）
 
 # 出错时彻底清干净再重来（保留 sdkconfig 不删，会重新触发 OTTO 段补加）
 rm -rf build managed_components dependencies.lock
@@ -61,11 +77,40 @@ idf.py reconfigure
 
 ## xinnan-tech xiaozhi-esp32-server（Docker minimal）
 
+> repo clone 在仓库外：`~/code/xinnan-tech/xiaozhi-esp32-server/`
+> compose 文件路径：`main/xiaozhi-server/docker-compose.yml`
+> 容器名：`xiaozhi-esp32-server`（**注意不是 xiaozhi-server**）
+
 ```bash
-# 启动 / 状态 / 日志（具体命令在 Week 0 实际跑通后回填）
-docker logs xiaozhi-server 2>&1 | tail -50
-# 端口：8000 / 8003 / 8004 监听确认
+COMPOSE_DIR=~/code/xinnan-tech/xiaozhi-esp32-server/main/xiaozhi-server
+
+# 启 / 停 / 重启
+cd $COMPOSE_DIR && docker compose up -d
+cd $COMPOSE_DIR && docker compose restart      # 改 config 后必须，等 ~8s
+
+# 状态 / 日志
+docker ps --filter name=xiaozhi-esp32-server --format '{{.Names}} {{.Status}} {{.Ports}}'
+docker logs xiaozhi-esp32-server 2>&1 | tail -50
+docker logs xiaozhi-esp32-server 2>&1 | grep -E 'STT|LLM|TTS|connected|session'
+
+# 端口（minimal 模式，**没有 8004 mcp-endpoint 子服务**）
+ss -tln | grep -E ':(8000|8003)'   # 期望都 LISTEN
+
+# 验 OTA endpoint（返回内容含 server.websocket 字段值）
+curl -sS http://localhost:8003/xiaozhi/ota/
+
+# config 文件（**含 LLM API key，gitignored，在仓库外**）
+ls $COMPOSE_DIR/data/.config.yaml
+grep -E 'websocket:|LLM' $COMPOSE_DIR/data/.config.yaml   # 看 ws URL + LLM 配置
+
+# ⚠️ FunASR 模型必须先下（H011 教训）：
+#   models/SenseVoiceSmall/model.pt (893 MB)
+#   缺 → EOFError → restart:always 崩溃循环
+# 见 H011 What I Did。
 ```
+
+**M1 后续要用的 8004 mcp-endpoint** 是独立子服务，minimal compose 不带；
+M1 开工时单独起，见 xinnan-tech `docs/mcp-endpoint-enable.md`。
 
 ## Python 桥接服务
 

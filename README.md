@@ -206,6 +206,28 @@ A: **99% 是板子类型没选对**。重新 `idf.py menuconfig` → `Xiaozhi As
 
 A: 已经在 git 历史里。子目录 `esp/xiaozhi-esp32/` 的 `backup-pre-cleanup-20260616` 分支保留了当时的完整状态，可以 `git checkout backup-pre-cleanup-20260616` 切回去查看。
 
+### Q: flash 后串口 `/dev/ttyUSB0` 不存在？
+
+A: ESP32-S3 OttoRobot 用内置 USB-OTG，串口是 **`/dev/ttyACM0`** 不是 `ttyUSB0`。
+先 `ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null` 看实际名字，再
+`idf.py -p /dev/ttyACM0 flash monitor`。
+
+### Q: flash 完后 monitor 卡在 `waiting for download`？
+
+A: 烧完没自动 reset。**按板上 RST 键** 一下，板子进 normal boot，monitor
+会立刻出现 `Booting` / `Free heap` 日志。不要 Ctrl+] 退出 monitor。
+
+### Q: 第一次烧完没 wifi，怎么配？
+
+A: 走 BluFi 蓝牙配网。用手机装 "EspBlufi" / "ESP-Touch" / 类似 app，扫到
+ESP32 蓝牙广播后传 SSID + 密码。详细见上游
+[`esp/xiaozhi-esp32/docs/blufi_zh.md`](esp/xiaozhi-esp32/docs/blufi_zh.md)。
+
+### Q: 对机器人说"小智"，ASR 识别成"小子"？
+
+A: 默认 FunASR SenseVoice 模型对"智"发音识别不稳；不影响 LLM 理解（DeepSeek
+能从上下文猜出来），后期可换更精准的 ASR provider 解决。
+
 ---
 
 ## 🙏 致谢

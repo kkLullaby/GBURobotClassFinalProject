@@ -172,6 +172,52 @@ LLM thinking 阶段调 `tools/call` → ESP32 执行后返回 result。
 **M4 直接在 `main/boards/otto-robot/otto_robot.cc` 里 `AddTool(...)` 即可**；
 模板看 `esp/xiaozhi-esp32/main/boards/esp-hi/esp_hi.cc:302-390`。
 
+### 4.2.bis Server 在 hello 之后**自动发** MCP `initialize`（实测发现）
+
+H1b A-bis wscat 实测 (2026-06-19)：server 发完 `type:"hello"` 之后**立刻**
+主动发一个 `type:"mcp"` 子帧，payload 是 JSON-RPC `initialize` 请求：
+
+```json
+{
+  "type": "mcp",
+  "payload": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {
+        "roots": {"listChanged": true},
+        "sampling": {},
+        "vision": {
+          "url": "http://172.19.0.2:8003/mcp/vision/explain",
+          "token": "<JWT 形如 eyJhbGciOiJIUzI1NiI...>"
+        }
+      },
+      "clientInfo": {"name": "XiaozhiClient", "version": "1.0.0"}
+    }
+  }
+}
+```
+
+含义：
+
+- `protocolVersion: "2024-11-05"` — server 用的 MCP spec 版本
+- `capabilities.vision` — server 暴露给 ESP32 的 vision 能力（HTTP endpoint
+  `/mcp/vision/explain` + 自带 JWT），ESP32 可以让 LLM 调用图像理解。
+  baseline OttoRobot 不一定用到，但 contract 必须记录这个 capability
+  存在
+- `clientInfo.name: "XiaozhiClient"` — server 自报家门（区别于 §4.3 接入点
+  路径用的 `XiaozhiMCPEndpointClient`）
+
+**ESP32 接收侧**：`application.cc:565` 进 `McpServer::ParseMessage(payload)`
+处理 — 上游 `main/mcp_server.cc` 实现 `initialize` 响应（返回 ESP32 自身
+capabilities），完成标准 MCP 握手；之后 server 会发 `tools/list` 收集
+ESP32 的 `AddTool` 工具。
+
+**M4 的隐含约束**：`AddTool` 名字 / schema 必须能通过 MCP `tools/list`
+正确序列化（cJSON 兼容）。
+
 ### 4.3 与 xinnan-tech MCP 接入点的关系
 
 xinnan-tech server **同时**支持另一种 MCP 路径：`ws://server:8004/mcp_endpoint/mcp/?token=...`，
@@ -236,3 +282,26 @@ wscat -c 'ws://localhost:8000/xiaozhi/v1/' \
 ```
 
 这是 H1b done 后的第一道 sanity check。
+
+### 8.bis H1b 实测数据 (2026-06-19)
+
+baseline 端到端验证记录（OttoRobot 板，xinnan-tech minimal docker + DeepSeek LLM）：
+
+| 项 | 值 |
+|---|---|
+| ESP32 device MAC | `ac:a7:04:30:91:78` |
+| 主机 LAN IP | `10.206.218.66/24` (wlp0s20f3 接手机热点 `kklull`) |
+| 串口 | **`/dev/ttyACM0`**（ESP32-S3 USB-OTG，**不是** `/dev/ttyUSB0`） |
+| 实际烧的 OTA URL | `http://10.206.218.66:8003/xiaozhi/ota/` |
+| WS endpoint | `ws://10.206.218.66:8000/xiaozhi/v1/` |
+| Session ID 样例 | `bbc16c92-c8eb-43e8-ae67-f80b0ba23be4` |
+| WS hello 握手 RTT | < 1s (monitor 时戳人工观察) |
+| 一轮对话 RTT (用户说完 → TTS 开播) | **~4-6s**（FunASR + DeepSeek + EdgeTTS）|
+| ESP32 boot heap free | (待补；M4 开工前 `grep heap_init` monitor 输出回填) |
+| 增量 build 耗时 (改 OTA_URL 后) | 3m17s |
+
+**人工验证**：对机器人说"你好小智"，FunASR 识别为"你好，小子"（小智发音
+ASR 默认模型识别不稳；不影响项目），DeepSeek 回复"哈喽～你哪位啊？"，
+EdgeTTS 合成喇叭播出。**双向通路全跑通**。
+
+H1b handoff 完整版：[archive/2026-06-19-flash-baseline-to-local-server-h1b-013.md](../../../handoffs/archive/2026-06-19-flash-baseline-to-local-server-h1b-013.md)。
