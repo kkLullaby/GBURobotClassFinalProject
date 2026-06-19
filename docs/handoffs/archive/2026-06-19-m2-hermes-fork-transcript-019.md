@@ -4,7 +4,7 @@ from: planner
 to: executor
 parent: 2026-06-19-m2-spike-openai-shim-018
 supersedes:
-status: pending
+status: done
 created: 2026-06-19
 artifacts:
   - openai-shim/src/openai_shim/hermes_backend.py (new)
@@ -254,3 +254,64 @@ git status --short
 - demo §1 答辩可演 = **H016 done + H018 done + H019 done**（Hermes 在
   对话流里"看见" ESP32 user 说了什么 + 机器人答了什么）；H020 真 LLM 是
   可选 polish
+
+## Executor's Reading
+### What I'll do
+- 在 H018 的 `openai-shim/` 上追加 `HermesBackend`，用 env 控制 app backend 装配，保持 Echo/SSE 既有行为不回退，并用 fake-Hermes ASGI app + 真 OpenAI SDK client 覆盖成功 fork、Hermes 500 不影响 SSE、env 未设不 fork 三条路径。
+
+### Assumptions made
+- [LOW] H018 已由 planner main-loop unblock 并归档为 done；当前 `openai-shim/` 是 H019 的直接修改基线。
+- [LOW] `session` 字段只要求形如 `chatcmpl-...`；由于 H018 的 SSE `chatcmpl` id 在 `sse.py` 内生成且本 handoff 明确不改 `sse.py`，HermesBackend 会为 transcript fork 生成独立 `chatcmpl-...` session id。
+- [LOW] fake-Hermes 测试会通过依赖注入 backend + `httpx.AsyncClient(ASGITransport(...))`，不依赖真实 Hermes CLI、网络或端口。
+- [MED] `asyncio.CancelledError` 在当前 Python 可能继承 `BaseException`，不能被普通 `Exception` 捕获；`_post_transcript` 会显式捕获并只 log warning，以满足“不影响 SSE”约束。
+- [LOW] 不修改 `openai_shim.echo_backend.EchoBackend` 和 `openai_shim.sse.chat_completion_sse`。
+
+## What I Did
+- Created `openai-shim/src/openai_shim/hermes_backend.py` with `HermesBackend`, inner `TextBackend` composition, assistant delta accumulation, `chatcmpl-...` transcript session id, fire-and-forget `asyncio.create_task`, in-flight task retention, injected/default `httpx.AsyncClient`, and warning-only fork error handling.
+- Updated `openai-shim/src/openai_shim/app.py` to read `HERMES_TRANSCRIPT_URL` at startup and wire either `HermesBackend(EchoBackend(), url)` or plain `EchoBackend`. `get_backend` is async so FastAPI does not route dependency resolution through the sandbox-sensitive sync threadpool.
+- Added `openai-shim/tests/test_hermes_fork.py` for successful fake-Hermes POST, fake-Hermes 500 while SSE still succeeds, and env-unset no-fork behavior. Updated `openai-shim/tests/test_chat_completions.py` only to keep the original OpenAI SDK tests stable in this sandbox by pre-setting the SDK platform probe value.
+- Updated `openai-shim/README.md` with a 13-line `H019 Hermes Fork` section containing `HERMES_TRANSCRIPT_URL`, the `hermes webhook subscribe` example, and fire-and-forget behavior.
+- Confirmed `openai-shim/src/openai_shim/echo_backend.py` and `openai-shim/src/openai_shim/sse.py` have no diff.
+- Did not run `hermes` CLI, did not touch `~/.hermes/`, did not touch H016 docker, ESP32, mcp-endpoint-server, or any true LLM provider integration.
+
+Test command:
+
+```bash
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+unset HERMES_TRANSCRIPT_URL
+/home/kk/miniconda3/bin/python -m pytest -xvs tests/
+```
+
+Output:
+
+```text
+============================= test session starts ==============================
+platform linux -- Python 3.13.9, pytest-9.1.0, pluggy-1.5.0 -- /home/kk/miniconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /home/kk/code/robot_class/final_pro_xiaozhi_robot/openai-shim
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.12.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+tests/test_chat_completions.py::test_streaming_echo_roundtrip PASSED
+tests/test_chat_completions.py::test_non_streaming_returns_503 PASSED
+tests/test_hermes_fork.py::test_transcript_posted_when_hermes_url_set PASSED
+tests/test_hermes_fork.py::test_sse_still_works_when_hermes_returns_500 PASSED
+tests/test_hermes_fork.py::test_no_fork_when_hermes_url_unset PASSED
+============================== 5 passed in 2.96s ===============================
+```
+
+`git status --short`:
+
+```text
+ M docs/handoffs/active/2026-06-19-m2-hermes-fork-transcript-019.md
+ ? esp/xiaozhi-esp32
+ M openai-shim/README.md
+ M openai-shim/src/openai_shim/app.py
+ M openai-shim/tests/test_chat_completions.py
+?? openai-shim/src/openai_shim/hermes_backend.py
+?? openai-shim/tests/test_hermes_fork.py
+```
+
+## Open Questions for Auditor
+- None. H019 explicitly says no auditor handoff; M2 batch review is deferred.

@@ -53,3 +53,17 @@ The tests use the real OpenAI Python SDK client against the ASGI app.
 H018 only proves an OpenAI-compatible streaming surface. H019 should fork the
 request transcript and final assistant text to Hermes per ADR-0005, replacing
 only the backend path while keeping the FastAPI and SSE surface stable.
+
+## H019 Hermes Fork
+
+```bash
+export HERMES_TRANSCRIPT_URL='http://localhost:8088/webhooks/xiaozhi-transcript'
+hermes webhook subscribe xiaozhi-transcript \
+  --prompt 'User said: {user}. Assistant replied: {assistant}.' \
+  --description 'XiaoZhi robot transcript ingress (H019)' \
+  --deliver-only
+```
+
+When the env var is set, the shim posts `{user, assistant, model, session,
+timestamp_unix}` to Hermes after each streamed response. The fork is
+fire-and-forget: Hermes failures are logged and do not break the SSE response.

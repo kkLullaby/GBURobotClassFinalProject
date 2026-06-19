@@ -5,6 +5,17 @@ from openai import APIStatusError, AsyncOpenAI
 from openai_shim.app import app
 
 
+def _openai_client(http_client):
+    client = AsyncOpenAI(
+        api_key="sk-fake",
+        base_url="http://testserver/v1",
+        http_client=http_client,
+    )
+    # Avoid OpenAI SDK platform probing through a threadpool in sandboxed tests.
+    client._platform = "Linux"
+    return client
+
+
 @pytest.mark.asyncio
 async def test_streaming_echo_roundtrip():
     transport = httpx.ASGITransport(app=app)
@@ -12,11 +23,7 @@ async def test_streaming_echo_roundtrip():
         transport=transport,
         base_url="http://testserver",
     ) as http_client:
-        client = AsyncOpenAI(
-            api_key="sk-fake",
-            base_url="http://testserver/v1",
-            http_client=http_client,
-        )
+        client = _openai_client(http_client)
 
         stream = await client.chat.completions.create(
             model="echo",
@@ -44,11 +51,7 @@ async def test_non_streaming_returns_503():
         transport=transport,
         base_url="http://testserver",
     ) as http_client:
-        client = AsyncOpenAI(
-            api_key="sk-fake",
-            base_url="http://testserver/v1",
-            http_client=http_client,
-        )
+        client = _openai_client(http_client)
 
         with pytest.raises(APIStatusError) as exc_info:
             await client.chat.completions.create(

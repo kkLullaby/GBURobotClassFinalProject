@@ -1,5 +1,6 @@
 """FastAPI app for the H018 OpenAI-compatible shim spike."""
 
+import os
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, Header
@@ -7,6 +8,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .echo_backend import EchoBackend, TextBackend
+from .hermes_backend import HermesBackend
 from .sse import chat_completion_sse
 
 
@@ -22,10 +24,19 @@ class ChatCompletionRequest(BaseModel):
 
 
 app = FastAPI(title="openai-shim")
-_backend: TextBackend = EchoBackend()
 
 
-def get_backend() -> TextBackend:
+def _build_backend() -> TextBackend:
+    transcript_url = os.environ.get("HERMES_TRANSCRIPT_URL")
+    if transcript_url:
+        return HermesBackend(EchoBackend(), transcript_url)
+    return EchoBackend()
+
+
+_backend: TextBackend = _build_backend()
+
+
+async def get_backend() -> TextBackend:
     return _backend
 
 
