@@ -11,7 +11,7 @@ Last compacted: 2026-06-19
 
 ## Active (status: pending|claimed|blocked)
 
-(none — Week 0 全部 done；H1b/P0 contract 由 planner 自起新 handoff)
+- [2026-06-19-flash-baseline-to-local-server-h1b-013](active/2026-06-19-flash-baseline-to-local-server-h1b-013.md) planner → **user** (pending): "H1b 烧 baseline + 切 OTA 到本地 docker server + monitor 一轮对话" — 需 USB 线 + 同 wifi LAN；server.websocket 当前是 0.0.0.0 必须先改 LAN IP；A-bis 用 wscat 先验 server 端
 
 ## Recent done / archived (last 7 days)
 
