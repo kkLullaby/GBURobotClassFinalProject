@@ -11,11 +11,13 @@ Last compacted: 2026-06-19
 
 ## Active (status: pending|claimed|blocked)
 
-- [2026-06-20-m3-end-to-end-demo-030](active/2026-06-20-m3-end-to-end-demo-030.md) planner → **user** (pending, ~20 min 物理, **现已 unblocked**: H029v2 + H028.ter + M2/M4 全 done): "M3 真端到端 demo 4 stage: 对机器人讲 → TUI 见 [xiaozhi] / Hermes session log / send 反向屏幕显字 / cron 自动 ping" — 走通 = ADR-0005 第一具物理化身的实地证明；准备 demo 答辩素材
+- [2026-06-20-m3-end-to-end-demo-030](active/2026-06-20-m3-end-to-end-demo-030.md) planner → user (**claimed 2026-06-20**, 7/7 机器侧 ✅ via planner main-loop; 2 项物理待 user 跟 H030.bis 一起跑): "M3 真端到端 4-stage demo" — codex sandbox Stage 0 全失败 (docker socket / unshare-net / hermes plugin hash 旧). planner 接管：cp 新 adapter.py + restart gateway (unset socks proxy + GATEWAY_ALLOW_ALL_USERS) + 起 sidecar + HMAC-签 curl → **HTTP 202 + Hermes 真 spawn session 20260620_020831_b8e02b27 + DeepSeek 19.4s/72 char + adapter.send 真调 sidecar (sidecar 500 因 M1 没接真 ESP32, 预期)**. 物理 (Stage A 真 voice + C TUI send + D cron) 留 H030.bis
+- [2026-06-20-m1-sidecar-real-pipe-031](active/2026-06-20-m1-sidecar-real-pipe-031.md) planner → executor (pending, **可交 coding agent / sandbox-friendly**, ~30 min): "M1 sidecar startup hook 真接 xiaozhi mcp_endpoint pipe" — 让 proxy_http.py 启动时 read MCP_ENDPOINT env + `pipe = await pipe.connect(url)` + `show_text_proxy._PIPE = pipe`. 解决 H030 sidecar 500 root cause (call_show_text 抛 'xiaozhi MCP pipe is not configured'). ~15 LOC + 2 mock pytest (startup-skip-when-no-env / startup-assigns-pipe-when-env). 不真起 ws (留 H030.bis user 物理)
+- [2026-06-20-m3-physical-esp32-loop-030bis](active/2026-06-20-m3-physical-esp32-loop-030bis.md) planner → user (pending, **blocked-by H031**, ~20 min 物理): "M3 物理最后一公里：~/.hermes/.env 写持久 env + voice → 屏幕真显 DeepSeek 回复 + TUI send → 屏幕 + cron 触发" — H030 已证 7/7 机器侧 ✅, 本 handoff 验真 ESP32 接 sidecar 后端到端跑通 = 答辩素材完整
 
 并行 backlog（不阻塞 M3）：
 - H024.bis (user 物理): flash ESP32 + tool count 14 + "笑一个" 验
-- H027 (planner self, ~30min): docs 集中回灌 8+2 项 (含 H028 bitter lesson #17 + H028.ter #18 + H029v1 #19 cosmetic-blocked-on-imagined-file)
+- H027 (planner self, ~30min): docs 集中回灌 12+ 项 (#17-#25, 含 H030 新增 #23/#24/#25: socks proxy 复发 + Hermes default-deny / sandbox 跑 user-led handoff 必败)
 
 ## Recent done / archived (last 7 days)
 
