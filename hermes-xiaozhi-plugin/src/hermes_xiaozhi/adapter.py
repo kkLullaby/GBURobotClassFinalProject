@@ -190,14 +190,16 @@ class XiaozhiAdapter(BasePlatformAdapter):
         }
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(
+                response = await client.post(
                     f"{self.mcp_adapter_url}/tools/show_text",
                     json=payload,
                 )
-        except Exception as exc:  # pragma: no cover - defensive Stage A stub
-            LOG.warning("XiaoZhi M1 proxy send failed: %s", exc)
+                response.raise_for_status()
+        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+            LOG.warning("xiaozhi M1 sidecar unreachable: %s", exc)
+            return SendResult(success=True, message_id=f"degraded-{chat_id}")
 
-        return SendResult(success=True, message_id=message_id)
+        return SendResult(success=True, message_id=f"sent-{chat_id}")
 
     async def get_chat_info(self, chat_id: str) -> Dict[str, Any]:
         return {"name": f"XiaoZhi-{chat_id}", "type": "dm"}

@@ -4,7 +4,7 @@ from: planner
 to: executor
 parent: 2026-06-20-m3-xiaozhi-adapter-listener-028ter
 supersedes: 2026-06-19-m3-m1-proxy-and-real-send-029
-status: pending
+status: done
 created: 2026-06-20
 artifacts:
   - xiaozhi-mcp-adapter/src/xiaozhi_mcp_adapter/show_text_proxy.py (新)
@@ -248,3 +248,208 @@ H030 物理 demo 后 batch review。
   够 demo；production polish 时考虑
 - ESP32 端 show_text("chat", text) 真显示的字数限制？文档说 ≤30 汉字，
   实测可能不同；H030 验
+
+## Executor's Reading
+### What I'll do
+- Implement the scoped M1 show_text proxy/sidecar and M3 adapter.send sidecar path, then run the M1 and M3 pytest suites specified by this handoff.
+
+### Assumptions made
+- [LOW] The parent/superseded context pointers for H028.ter and H029 v1 have moved from `active/` to `archive/`; using the INDEX locations preserves the intended history without changing implementation scope.
+- [LOW] `proxy_http._PIPE` may remain a module-level placeholder in this handoff because production pipe wiring is explicitly left to H030 and tests monkeypatch `proxy_http.call_show_text`.
+- [LOW] `build_show_text_jsonrpc(device_id, ...)` keeps the `device_id` parameter for the handoff API even though the current ESP32 `self.otto.show_text` contract has no `device_id` argument.
+
+## What I Did
+- Modified `xiaozhi-mcp-adapter/`:
+  - added `src/xiaozhi_mcp_adapter/show_text_proxy.py`;
+  - added `src/xiaozhi_mcp_adapter/proxy_http.py`;
+  - added `tests/test_show_text_proxy.py`;
+  - added `fastapi>=0.110` to `pyproject.toml`.
+- Modified `hermes-xiaozhi-plugin/`:
+  - updated `src/hermes_xiaozhi/adapter.py::send()` to return `sent-*` on sidecar success and `degraded-*` on `httpx.HTTPError` / `asyncio.TimeoutError`;
+  - updated `tests/test_adapter_send.py` with success, degraded, and fake-sidecar send coverage.
+- Did not modify M2, M4, `~/.hermes/`, or any Hermes install state.
+- Ran the M1 scoped test command and blocked on failure before reaching M3 tests:
+
+```bash
+cd xiaozhi-mcp-adapter
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+PYTHONPATH="src:$HOME/.local/share/uv/tools/hermes-agent/lib/python3.13/site-packages" /home/kk/miniconda3/bin/python -m pytest -xvs tests/
+```
+
+Full output:
+
+```text
+============================= test session starts ==============================
+platform linux -- Python 3.13.9, pytest-9.1.0, pluggy-1.5.0 -- /home/kk/miniconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /home/kk/code/robot_class/final_pro_xiaozhi_robot/xiaozhi-mcp-adapter
+configfile: pyproject.toml
+plugins: anyio-4.14.0, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 4 items
+
+tests/test_pipe_e2e.py::test_pipe_echo_roundtrip FAILED
+
+=================================== FAILURES ===================================
+___________________________ test_pipe_echo_roundtrip ___________________________
+
+    @pytest.mark.asyncio
+    async def test_pipe_echo_roundtrip():
+        done = asyncio.Event()
+        errors = []
+    
+        async def handler(websocket, *_args):
+            try:
+                await _mock_mcp_endpoint(websocket)
+            except Exception as exc:  # pragma: no cover - re-raised below
+                errors.append(exc)
+            finally:
+                done.set()
+    
+>       async with websockets.serve(handler, "127.0.0.1", 0) as server:
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_pipe_e2e.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/kk/.local/share/uv/tools/hermes-agent/lib/python3.13/site-packages/websockets/asyncio/server.py:829: in __aenter__
+    return await self
+           ^^^^^^^^^^
+/home/kk/.local/share/uv/tools/hermes-agent/lib/python3.13/site-packages/websockets/asyncio/server.py:847: in __await_impl__
+    server = await self.create_server
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+protocol_factory = <function serve.__init__.<locals>.factory at 0x7562209a36a0>
+host = '127.0.0.1', port = 0, family = <AddressFamily.AF_UNSPEC: 0>
+flags = <AddressInfo.AI_PASSIVE: 1>, sock = None, backlog = 100, ssl = None
+reuse_address = True, reuse_port = None, keep_alive = None
+ssl_handshake_timeout = None, ssl_shutdown_timeout = None, start_serving = True
+
+    async def create_server(
+            self, protocol_factory, host=None, port=None,
+            *,
+            family=socket.AF_UNSPEC,
+            flags=socket.AI_PASSIVE,
+            sock=None,
+            backlog=100,
+            ssl=None,
+            reuse_address=None,
+            reuse_port=None,
+            keep_alive=None,
+            ssl_handshake_timeout=None,
+            ssl_shutdown_timeout=None,
+            start_serving=True):
+        """Create a TCP server.
+    
+        The host parameter can be a string, in that case the TCP server is
+        bound to host and port.
+    
+        The host parameter can also be a sequence of strings and in that case
+        the TCP server is bound to all hosts of the sequence. If a host
+        appears multiple times (possibly indirectly e.g. when hostnames
+        resolve to the same IP address), the server is only bound once to
+        that host.
+    
+        Return a Server object which can be used to stop the service.
+    
+        This method is a coroutine.
+        """
+        if isinstance(ssl, bool):
+            raise TypeError('ssl argument must be an SSLContext or None')
+    
+        if ssl_handshake_timeout is not None and ssl is None:
+            raise ValueError(
+                'ssl_handshake_timeout is only meaningful with ssl')
+    
+        if ssl_shutdown_timeout is not None and ssl is None:
+            raise ValueError(
+                'ssl_shutdown_timeout is only meaningful with ssl')
+    
+        if sock is not None:
+            _check_ssl_socket(sock)
+    
+        if host is not None or port is not None:
+            if sock is not None:
+                raise ValueError(
+                    'host/port and sock can not be specified at the same time')
+    
+            if reuse_address is None:
+                reuse_address = os.name == "posix" and sys.platform != "cygwin"
+            sockets = []
+            if host == '':
+                hosts = [None]
+            elif (isinstance(host, str) or
+                  not isinstance(host, collections.abc.Iterable)):
+                hosts = [host]
+            else:
+                hosts = host
+    
+            fs = [self._create_server_getaddrinfo(host, port, family=family,
+                                                  flags=flags)
+                  for host in hosts]
+            infos = await tasks.gather(*fs)
+            infos = set(itertools.chain.from_iterable(infos))
+    
+            completed = False
+            try:
+                for res in infos:
+                    af, socktype, proto, canonname, sa = res
+                    try:
+                        sock = socket.socket(af, socktype, proto)
+                    except socket.error:
+                        # Assume it's a bad family/type/protocol combination.
+                        if self._debug:
+                            logger.warning('create_server() failed to create '
+                                           'socket.socket(%r, %r, %r)',
+                                           af, socktype, proto, exc_info=True)
+                        continue
+                    sockets.append(sock)
+                    if reuse_address:
+                        sock.setsockopt(
+                            socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
+                    # Since Linux 6.12.9, SO_REUSEPORT is not allowed
+                    # on other address families than AF_INET/AF_INET6.
+                    if reuse_port and af in (socket.AF_INET, socket.AF_INET6):
+                        _set_reuseport(sock)
+                    if keep_alive:
+                        sock.setsockopt(
+                            socket.SOL_SOCKET, socket.SO_KEEPALIVE, True)
+                    # Disable IPv4/IPv6 dual stack support (enabled by
+                    # default on Linux) which makes a single socket
+                    # listen on both address families.
+                    if (_HAS_IPv6 and
+                            af == socket.AF_INET6 and
+                            hasattr(socket, 'IPPROTO_IPV6')):
+                        sock.setsockopt(socket.IPPROTO_IPV6,
+                                        socket.IPV6_V6ONLY,
+                                        True)
+                    try:
+                        sock.bind(sa)
+                    except OSError as err:
+                        msg = ('error while attempting '
+                               'to bind on address %r: %s'
+                               % (sa, str(err).lower()))
+                        if err.errno == errno.EADDRNOTAVAIL:
+                            # Assume the family is not enabled (bpo-30945)
+                            sockets.pop()
+                            sock.close()
+                            if self._debug:
+                                logger.warning(msg)
+                            continue
+                        raise OSError(err.errno, msg) from None
+    
+                if not sockets:
+>                   raise OSError('could not bind on any address out of %r'
+                                  % ([info[4] for info in infos],))
+E                                 OSError: could not bind on any address out of [('127.0.0.1', 0)]
+
+/home/kk/miniconda3/lib/python3.13/asyncio/base_events.py:1633: OSError
+=========================== short test summary info ============================
+FAILED tests/test_pipe_e2e.py::test_pipe_echo_roundtrip - OSError: could not ...
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+============================== 1 failed in 0.97s ===============================
+```
+
+## Open Questions for Auditor
+- None; this handoff is blocked by the sandbox bind failure before M3 tests could be run.
