@@ -12,9 +12,10 @@ Last compacted: 2026-06-19
 ## Active (status: pending|claimed|blocked)
 
 - [2026-06-19-mcp-endpoint-server-bringup-016](active/2026-06-19-mcp-endpoint-server-bringup-016.md) planner → **user** (pending, ~25 min): "起 xinnan-tech mcp-endpoint-server (port 8004) + 配进 xiaozhi-server + 真 M1 pipe round-trip + ESP32 voice 调 echo tool" — M1 spike 升级真链路
-- [2026-06-19-m2-spike-openai-shim-018](active/2026-06-19-m2-spike-openai-shim-018.md) planner → executor (pending, **可交 coding agent / sandbox-friendly**): "M2 spike: openai-shim FastAPI + SSE + echo backend + pytest e2e" — ADR-0005 主线，~3-4h agent 工作
 
 ## Recent done / archived (last 7 days)
+
+- [2026-06-19-m2-spike-openai-shim-018](archive/2026-06-19-m2-spike-openai-shim-018.md) planner → executor (done 2026-06-19, codex spike + planner unblock per ADR-0003 II): "M2 spike: openai-shim FastAPI + SSE + echo backend + pytest e2e" — codex 写 365 LOC 干净骨架（app.py + sse.py + echo_backend.py + e2e test + README 55 行），sandbox 无 PyPI 装不了 deps；planner main-loop 装 28 包 + `pytest -xvs tests/` **2/2 PASS 3.95s** + curl SSE smoke (frame 含 finish_reason="stop", `[DONE]` 收尾)。backend Protocol 接 H019 Hermes fork 已铺；ADR-0005 主线进度 +1
 
 - [2026-06-19-m1-spike-echo-tool-015](archive/2026-06-19-m1-spike-echo-tool-015.md) planner → executor (done 2026-06-19, codex spike + planner unblock per ADR-0003 II): "M1 spike: echo tool round-trip" — codex 写出 428 LOC 干净骨架（pipe.py + echo_tool.py + e2e test + README）但 sandbox 无 PyPI 装不了 deps；planner main-loop 装 deps + 跑 `pytest -xvs tests/` → **PASSED in 1.17s**。bonus：发现 user 默认 python 是 PlatformIO penv，M1+ 必须用 conda python；shared/global-commands.md 待补
 

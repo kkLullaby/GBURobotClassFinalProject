@@ -4,7 +4,7 @@ from: planner
 to: user
 parent: 2026-06-19-m1-spike-echo-tool-015
 supersedes:
-status: pending
+status: blocked
 created: 2026-06-19
 artifacts:
   - ~/code/xinnan-tech/mcp-endpoint-server/ (clone + docker compose)
@@ -192,3 +192,56 @@ kill $PIPE_PID
 - LLM 不主动调 echo tool → 记一条 Open Q 给 planner，回灌 ADR-0005 §Trade-off
   讨论"function_call 触发条件"
 - mcp-endpoint-server 默认 token 是否 rotate / 持久化 → 影响 demo 长期可用
+
+## Executor's Reading
+### What I'll do
+- 先做 H016 的最小 pre-flight：确认当前环境是否能访问 docker、netlink、仓库外 `~/code/xinnan-tech` 写入和主机 8004；如果可用，再部署 `mcp-endpoint-server` 并接真 M1 pipe；如果不可用，按错误纪律阻塞并贴完整 stderr。
+
+### Assumptions made
+- [MED] handoff frontmatter 是 `to: user`，但用户把路径交给当前 Codex executor 会话；我按代跑方式接手并留痕，不新增 auditor handoff，因为 H016 明确写了“不发 auditor”。
+- [MED] H016 的 AC 依赖 docker daemon、netlink/LAN IP、仓库外写入、真实 ESP32 语音触发；当前 sandbox 可能无法完成这些步骤，我会先用只读/探测命令验证能力，任何实质错误立即 blocked。
+- [LOW] H015 产物已经在 archive 里记录为 done 且 pytest pass；本任务不修改 `xiaozhi-mcp-adapter/` 代码，只会在可执行时运行它。
+- [LOW] 如能继续执行，memo 不贴 token/API key，只贴 host、port、path 和非敏感日志摘要。
+
+## What I Did
+- 已按 H016 要求读取 handoff INDEX、H016、executor 约束、CLAUDE.md、handoff protocol、ADR-0003，以及上下文：H015、H011、H013、ESP32↔server contract、xinnan-tech MCP endpoint research note、shared global commands、上游 `mcp-endpoint-enable.md` / `mcp-endpoint-integration.md`。
+- 已把状态从 `pending` 推进到 `claimed`，追加 `Executor's Reading`。
+- 只做了 pre-flight 能力探测；未 clone `mcp-endpoint-server`，未改仓库外 xiaozhi-server config，未启动/停止任何容器，未运行 M1 pipe，未触碰 ESP32。
+- 阻塞原因：当前 Codex sandbox 无法访问 docker daemon / netlink，且 `/home/kk/code/xinnan-tech` 对本会话不可写；H016 的 AC 必须依赖这些能力和真实 ESP32 语音触发，因此不能在当前会话完成。
+- 当前 `mcp-endpoint-server` 仓库外目录也不存在，需在有权限的用户主终端 clone。
+- `git status --short`：
+
+```text
+ M docs/handoffs/active/2026-06-19-mcp-endpoint-server-bringup-016.md
+ ? esp/xiaozhi-esp32
+```
+
+- 完整 stderr / command output：
+
+```text
+$ docker ps --format '{{.Names}} {{.Status}} {{.Ports}}'
+permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
+```
+
+```text
+$ ss -tln | grep -E ':8004\b' || true
+Cannot open netlink socket: Operation not permitted
+```
+
+```text
+$ ip addr show | grep -E 'inet 10\.|inet 192\.|inet 172\.(16|17|18|19|2[0-9]|3[01])\.' | grep -v 'docker\|br-\|veth' | head -3
+Cannot open netlink socket: Operation not permitted
+```
+
+```text
+$ test -w /home/kk/code/xinnan-tech && echo writable || echo not-writable
+not-writable
+```
+
+```text
+$ test -d /home/kk/code/xinnan-tech/mcp-endpoint-server && git -C /home/kk/code/xinnan-tech/mcp-endpoint-server log -1 --format='%H %s' || echo missing-mcp-endpoint-server
+missing-mcp-endpoint-server
+```
+
+## Open Questions for Planner/User
+- 需要在有 docker/netlink/仓库外写权限/ESP32 物理访问的用户主终端继续 H016。建议直接照 H016 Suggested Steps 跑；M1 pipe 启动命令使用 shared/global-commands 记录的 conda Python：`/home/kk/miniconda3/bin/python -m xiaozhi_mcp_adapter.pipe`。
