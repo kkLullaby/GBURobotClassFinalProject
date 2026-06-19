@@ -1,6 +1,0 @@
-mcp
-websockets>=12
-
-[test]
-pytest>=7
-pytest-asyncio
