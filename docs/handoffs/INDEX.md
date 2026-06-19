@@ -12,6 +12,8 @@ Last compacted: 2026-06-19
 ## Active (status: pending|claimed|blocked)
 
 - [2026-06-19-mcp-endpoint-server-bringup-016](active/2026-06-19-mcp-endpoint-server-bringup-016.md) planner → **user** (blocked, Stage A/B/C done by planner main-loop, Stage D ESP32 voice 留 user): "起 xinnan-tech mcp-endpoint-server (port 8004) + 配进 xiaozhi-server + 真 M1 pipe round-trip + ESP32 voice 调 echo tool" — **9/13 AC 已 ✅**：mcp-endpoint up + KEY/TOKEN extracted + xiaozhi-server config 含 `mcp接入点是 ws://10.2.244.38:8004/...` + M1 pipe `connected to MCP endpoint` + mcp-endpoint 反向看到 register。剩 4 AC 物理段：用户重连 wifi / ESP32 OTA 段对齐后 voice 测；bonus discoveries: `ALL_PROXY=socks` 杀 websockets / wifi 段变 ESP32 死 / token `%3D` 保 raw
+- [2026-06-19-real-hermes-transcript-handshake-020](active/2026-06-19-real-hermes-transcript-handshake-020.md) planner → **user** (pending, ~30 min): "起 hermes gateway run + webhook subscribe xiaozhi-transcript + 起 shim with HERMES_TRANSCRIPT_URL=http://localhost:8644/... + curl 触发 → 验 Hermes 真收到 transcript 并渲染 prompt template" — ADR-0005 最后一脚踏实；H019 fake-hermes 5/5 PASS 后的真链路验证
+- [2026-06-19-m2-deepseek-backend-021](active/2026-06-19-m2-deepseek-backend-021.md) planner → executor (pending, **可交 coding agent / sandbox-friendly**): "M2 加 DeepSeekBackend 接 openai.AsyncOpenAI(base_url=api.deepseek.com) + fake-deepseek ASGI mock 测 + HermesBackend wrap 复用" — Week 1.4 真智能；与 H020 互不阻塞；H018(2)+H019(3)+H021(4)=9 测齐
 
 ## Recent done / archived (last 7 days)
 
