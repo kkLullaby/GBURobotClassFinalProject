@@ -6,22 +6,58 @@
 ## ESP32 编译 / 烧录 / 监视
 
 ```bash
-# 每次新开终端必须 source（建议在 .bashrc 加 alias: get_idf552='source ~/esp-idf-5.5.2/export.sh'）
+# ──────────────────────────────────────────────────────────────
+# 一次性：装完 IDF 必须立刻 init 其自身的 submodules（H012 教训）
+# ──────────────────────────────────────────────────────────────
+# 若漏跑这一步，set-target/build 在 __component_get_requirements 阶段
+# 就崩，报 "Missing esp-mqtt submodule"
+cd ~/esp-idf-5.5.2 && git submodule update --init --recursive  # ~15 min
+# 验：git submodule status | grep -c '^-'   →   0
+# 不要带 --depth=1，会在 lib_esp32c3_family 处中断 (pin 非 branch tip)
+
+# ──────────────────────────────────────────────────────────────
+# 每次新开终端必须 source（建议在 .bashrc 加 alias）
+# alias get_idf552='source ~/esp-idf-5.5.2/export.sh'
+# ──────────────────────────────────────────────────────────────
 source ~/esp-idf-5.5.2/export.sh
+idf.py --version   # 期望 ESP-IDF v5.5.2
 
 cd esp/xiaozhi-esp32
 
-# 首次配置（板子选错就是黑屏 + 无声 → 重选）
+# 首次配置
 idf.py set-target esp32s3
-idf.py menuconfig          # Xiaozhi Assistant → Board Type → Otto Robot；保存 S→Enter→Q
+idf.py menuconfig          # Xiaozhi Assistant → Board Type → ottoRobot
+                           # 注意：Kconfig prompt 实际是 "ottoRobot" (小写 o 驼峰)
+                           # 保存 S→Enter→Q
+
+# ──────────────────────────────────────────────────────────────
+# OTTO_ROBOT 板专属：menuconfig 之后必须 append 3 个 CONFIG
+# 来源：main/boards/otto-robot/config.json 的 sdkconfig_append 字段
+# 上游 README 漏说；若不 append，build 在 2206/2212 处崩
+# (websocket_control_server.cc 报 httpd_ws_* 未定义)
+# ──────────────────────────────────────────────────────────────
+cat >> sdkconfig <<'EOF'
+
+# OTTO_ROBOT 板要求 (from main/boards/otto-robot/config.json sdkconfig_append)
+CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_CAMERA_OV2640=y
+CONFIG_CAMERA_OV3660=y
+EOF
 
 # 日常
-idf.py build flash monitor # Ctrl+] 退出 monitor
+idf.py build               # 全冷 ~7 min；含 ~150 个 managed_components pull
+idf.py flash monitor       # Ctrl+] 退出 monitor
 
-# 出错时彻底清干净再重来
+# 出错时彻底清干净再重来（保留 sdkconfig 不删，会重新触发 OTTO 段补加）
 rm -rf build managed_components dependencies.lock
 idf.py reconfigure
 ```
+
+**Build baseline（H012 实测 2026-06-19）**：
+
+- `xiaozhi.bin` = 3.5 MiB，app partition 4 MiB，**剩 ~440 KB (11%) 给 M4 加 MCP tools**
+- 全冷 wall-clock 7 min（含 managed_components 下载）
+- 13 warnings 全是上游 (lwip / esp_video `_IOR/_IOW` 重定义；driver/adc.h legacy)
 
 ## xinnan-tech xiaozhi-esp32-server（Docker minimal）
 

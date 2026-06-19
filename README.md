@@ -76,6 +76,11 @@
 git clone -b v5.5.2 --recursive https://github.com/espressif/esp-idf.git ~/esp-idf-5.5.2
 cd ~/esp-idf-5.5.2
 ./install.sh esp32s3
+
+# ⚠️ 如果 clone 时没带 --recursive，必须立刻补这一句，否则后续 build 会崩
+# （报 "Missing esp-mqtt submodule" 之类）。不要带 --depth=1，会在
+# components/bt/controller/lib_esp32c3_family 处中断
+git submodule update --init --recursive
 ```
 
 每次新开终端都要激活：
@@ -110,7 +115,7 @@ idf.py menuconfig
 ```
 → Xiaozhi Assistant
   → Board Type
-    → 选择  Otto Robot      ← 必须选这个！
+    → 选择  ottoRobot       ← 必须选这个！（Kconfig prompt 实际是小写 o + 驼峰）
 ```
 
 > ❗ **默认是 `Bread Compact WiFi`（面包板版），引脚映射与 Otto 硬件完全不同**。
@@ -118,10 +123,26 @@ idf.py menuconfig
 
 保存退出（`S` → 回车 → `Q`）。
 
-### 4. 编译 + 烧录 + 串口监视
+### 4. ⚠️ OTTO_ROBOT 板：menuconfig 之后必须 append 3 个 CONFIG
+
+上游 README 漏说，但 `main/boards/otto-robot/config.json` 的 `sdkconfig_append`
+要求 3 个 CONFIG，没有它们 build 会在 2206/2212 处崩
+（`websocket_control_server.cc` 报 `httpd_ws_*` 未声明）：
 
 ```bash
-idf.py build flash monitor
+cat >> sdkconfig <<'EOF'
+
+# OTTO_ROBOT 板要求 (from main/boards/otto-robot/config.json sdkconfig_append)
+CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_CAMERA_OV2640=y
+CONFIG_CAMERA_OV3660=y
+EOF
+```
+
+### 5. 编译 + 烧录 + 串口监视
+
+```bash
+idf.py build flash monitor    # 全冷 build ~7 min
 ```
 
 退出 monitor：`Ctrl + ]`

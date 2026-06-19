@@ -144,16 +144,25 @@ doc 推断、跳过提问），确认这是个：
 
 ### 本项目特有 pitfall（来自 README/roadmap/research-notes）
 
-1. **ESP32 板子型号默认是 `Bread Compact WiFi`，必须改 `Otto Robot`**
+1. **ESP32 板子型号默认是 `Bread Compact WiFi`，必须改 `ottoRobot`**
    - 选错 → 屏幕黑、麦克风/喇叭无声、按键无响应
    - 改完必须 `rm -rf build sdkconfig && idf.py set-target esp32s3 && idf.py menuconfig` 重来
-   - 出处：README §3 + roadmap Week 0 风险 1
+   - 注意 Kconfig prompt 实际是 `"ottoRobot"`（小写 o + 驼峰），不是 README/CLAUDE 上写的 "Otto Robot"
+   - **menuconfig 不够（H012 教训, 2026-06-19）**：选完 `ottoRobot` 后还**必须**手工 append 3 个
+     CONFIG (`HTTPD_WS_SUPPORT=y` + `CAMERA_OV2640=y` + `CAMERA_OV3660=y`)，否则 build
+     在 2206/2212 处崩 (`websocket_control_server.cc` httpd_ws_* 未声明)。来源：
+     `main/boards/otto-robot/config.json` 的 `sdkconfig_append` 字段——上游 README 漏说
+   - 出处：README §3 + roadmap Week 0 风险 1 + [H012](../handoffs/archive/2026-06-19-idf-build-verify-h1a-012.md) §Unblock + Build SUCCESS
 
 2. **ESP-IDF 版本必须 ≥ 5.5.2（上游硬性要求）**
    - 用 5.3.x 会 version solving failed
    - 之前在 5.3.2 上做了大量降级 hack，**升 5.5.2 后那些 hack 全是白做**
      （历史在 `esp/xiaozhi-esp32/backup-pre-cleanup-20260616` 分支）
    - **教训**：不要为了用更熟的工具版本去 hack 上游硬性要求
+   - **新装 IDF 必须 init 其自身 submodules（H012 教训, 2026-06-19）**：
+     `cd ~/esp-idf-5.5.2 && git submodule update --init --recursive`（不要带
+     `--depth=1`——在 `lib_esp32c3_family` 处 fetch 会中断、留 `refs/heads/.invalid`
+     ref，需手工 nuke `.git/modules/...` 重 init）
 
 3. **组件没拉全 → 找不到 `esp_video_init.h` 之类的头文件**
    - 修复：`rm -rf build managed_components dependencies.lock && idf.py reconfigure`
