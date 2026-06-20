@@ -1,237 +1,261 @@
-# 小智 AI 聊天机器人 — GBU 期末作业
+# xiaozhi-robot
 
-> 🎓 **ESP32-S3 OttoRobot 形态 | 上游原版 + ESP-IDF 5.5.2**
+> **把开源 AI Agent 装进 ESP32 桌面机器人 — voice → tool-call → 真做事 (舵机真动, 喇叭真说)**
 >
-> 本仓库直接跟随 [78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32) 上游 `main` 分支，**未对源码或依赖做降级修改**。
-> 子目录 `esp/xiaozhi-esp32/` 是上游仓库的 git submodule/gitlink，可随时 `git pull` 升级。
+> [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![ESP-IDF](https://img.shields.io/badge/ESP--IDF-5.5.2-blue.svg)](https://github.com/espressif/esp-idf) [![Python](https://img.shields.io/badge/Python-3.10+-brightgreen.svg)](https://www.python.org/) [![Hermes Agent](https://img.shields.io/badge/Hermes-Agent-purple.svg)](https://github.com/NousResearch/hermes-agent)
+>
+> 中文 | [English](#english)
+>
+> 大湾区大学 (GBU) 机器人课期末作业 — **完整复刻教程开放, 任何人可以照着搭一台**.
 
 ---
 
-## 🌟 项目愿景
+## ✨ 一句话定位
 
-> **一句话定位：把 ESP32 小智机器人变成 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的第一具物理化身。**
+把 ESP32-S3 OttoRobot 变成 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的第一具**物理化身**——不是又一个智能音箱，而是一个**能听话、真做事**的桌面 AI 助手：
 
-机器人不再是"独立的语音助手"，而是一个开源、跑在本地、支持 20+ channel 的通用 AI 助手（Hermes Agent）的**新 channel + 设备工具集**。
+- 你说 **"挥挥手"** → **舵机真挥**（DeepSeek 经 hybrid router 调 `self_otto_action(hand_wave)`）
+- 你说 **"帮我看 final 文件夹有什么"** → 喇叭说出真目录名（hermes-z 真跑 `ls` + DeepSeek 总结）
+- 你说 **"用 git log 看最近三次提交"** → 喇叭说真 commit 信息
 
-| 你能做什么 | 怎么做 |
-|----------|--------|
-| 对着机器人说话，它接到 Hermes 处理 | xinnan-tech xiaozhi-server + 自写 openai-shim → Hermes |
-| Telegram / 终端 / Discord 消息让机器人发声 | Hermes 的 `send_message_tool` 跨 channel 投递 |
-| 让 LLM 控制机器人表情、动作、屏幕、LED | ESP32 扩展 MCP 工具，自写 adapter 暴露给 Hermes |
-| 机器人主动通知（早安播报、PR 监控、消息提醒）| Hermes cron + xiaozhi channel 投递 |
-| 把机器人留在现场，远程通过手机让它替你应答 | 跨 channel 消息投递（demo 场景二） |
+**真在做事，不是录音回放。**
 
-**创新点（不是硬件，是拓扑）**：
-- 把一个**仅活在终端和聊天软件里**的开源 AI 助手**物理化身**为一具能说话、能转头、能感知环境的桌面机器人
-- **零私有协议** —— 全程标准 MCP + Hermes 标准 channel 接口
-- **后端无关** —— LLM 可在 OpenAI/Anthropic/Ollama/Nous Portal/DeepSeek 等之间无缝切换
-- **可作为 PR 贡献给 Hermes 社区**，可能成为它首个 ESP32 embodiment
+## 🎬 Demo
 
----
+> 占位: 项目演示视频会贴在 [Releases](../../releases) 或者 [demo-script-h033.md](docs/demo-script-h033.md) 录屏链接.
+
+| Take | 你讲 | 路由 | 喇叭/物理 |
+|---|---|---|---|
+| 1 | "挥挥手" | DeepSeek + tools | 🤚 **手真挥** |
+| 2 | "向前走两步" | DeepSeek + tools | 👣 **真走** (servo 真转) |
+| 3 | "坐下" | DeepSeek + tools | 🪑 **真坐** |
+| 4 | "帮我看 final 文件夹有什么目录" | hermes-z + shell tool | 🔊 "目录有 5 个: docs, esp, openai-shim..." |
+| 5 | "现在几点了" | hermes-z + date tool | 🔊 "现在是 X 点 X 分" |
+| 6 | "读 README 告诉我项目目标" | hermes-z + file tool | 🔊 elevator pitch |
+
+## 🎯 创新点 (在拓扑, 不在硬件)
+
+| | 智能音箱 (小爱 / 天猫) | xiaozhi-robot |
+|---|---|---|
+| 后端 | 厂商私有, 锁死 | OpenAI 兼容, 可换 (DeepSeek/Claude/Ollama/Nous Portal) |
+| 协议 | 私有 ws/RPC | 标准 OpenAI Chat + MCP + Hermes channel ABI |
+| Tool 扩展 | 内置 skill (Alexa 风) | hermes-z + 任意 MCP server (shell/file/browser/lark/...) |
+| Channel mesh | 单设备 | hermes 多 channel 联动 (cron / telegram / discord / 飞书 / ...) |
+| 物理动作 | 无 | OttoRobot 26 个舵机动作 + 21 个 emoji + 屏幕显字 |
+| 开源 | ❌ | ✅ (MIT) |
+
+可作为 PR 贡献给 Hermes 社区, 成为它官方支持的首个 ESP32 embodiment.
+
+## 🏗️ 架构
+
+```
+ESP32-S3 OttoRobot ←─── WiFi ───→ xinnan-tech docker server (STT/TTS/WebSocket)
+                                            ↓ OpenAI-compat HTTP
+                                    openai-shim (FastAPI)
+                                            ↓ Hybrid Router 看 user text
+                            ┌───────────────┴───────────────┐
+                       motor keyword (走/挥/坐/笑/...)   其余 (查/读/总结/聊天)
+                            ↓                                 ↓
+                  raw_deepseek_proxy (tools 透传)      HermesAgentBackend
+                            ↓                                 ↓
+                  DeepSeek tool_calls                   hermes -z PROMPT --yolo
+                            ↓                                 ↓
+                  xinnan-tech execute                   hermes agent + MCP tools
+                            ↓                            (shell/file/git/browser/...)
+                  mcp_endpoint /call/ → ESP32                ↓
+                            ↓                            stdout → SSE → 喇叭说
+                       🤖 舵机真动                          🔊
+```
+
+详见 [docs/architecture.md](docs/architecture.md) + ADR [0005](docs/adr/0005-openai-compat-transcript-egress.md) / [0006](docs/adr/0006-hermes-agent-backend-voice-replace-llm.md) / [0007](docs/adr/0007-hybrid-backend-router.md).
+
+## 🚀 Quickstart
+
+> ⏱️ **新机器从 0 到真挥手**: 约 3 小时.
+> 详细完整指南 → **[docs/DEPLOY.md](docs/DEPLOY.md)**
+
+```bash
+# 1. Clone (含 submodule)
+git clone --recurse-submodules https://github.com/kkLullaby/GBURobotClassFinalProject.git
+cd GBURobotClassFinalProject
+
+# 2. 起 docker (xinnan-tech 后端 — 自己 clone + 配 LLM key)
+#   见 docs/DEPLOY.md Part 3
+
+# 3. 装 Python 包 + Hermes Agent
+for pkg in xiaozhi-mcp-adapter openai-shim hermes-xiaozhi-plugin; do
+  (cd $pkg && uv pip install --system -e '.[test]')
+done
+uv tool install hermes-agent
+hermes auth add deepseek --api-key 'sk-<你的 DeepSeek key>'
+
+# 4. 烧 ESP32 (一次性)
+source ~/esp-idf-5.5.2/export.sh
+cd esp/xiaozhi-esp32 && idf.py set-target esp32s3
+idf.py menuconfig    # Board Type → ottoRobot
+# (append OTTO_ROBOT 3 个 CONFIG, 见 DEPLOY.md Part 6)
+idf.py -p /dev/ttyACM0 build flash monitor
+
+# 5. 起 shim (hybrid 模式)
+cd openai-shim
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+nohup env \
+  OPENAI_SHIM_BACKEND=hybrid \
+  DEEPSEEK_API_KEY='sk-<你的 key>' \
+  HERMES_BIN=$(which hermes) \
+  PYTHONPATH=src python -m uvicorn openai_shim.app:app \
+    --host 0.0.0.0 --port 8089 \
+  > /tmp/shim.log 2>&1 & disown
+
+# 6. 对机器人讲 "挥挥手" 🤚
+```
+
+## 🧩 模块 (M1-M4)
+
+| 模块 | 路径 | 作用 | LOC |
+|---|---|---|---|
+| **M1** | `xiaozhi-mcp-adapter/` | Python sidecar, 接 mcp_endpoint pipe (现 H035 hybrid 不依赖, 见 ADR-0007) | ~600 |
+| **M2** | `openai-shim/` | FastAPI OpenAI 兼容 shim, **5 backend** + **hybrid router** | ~500 |
+| **M3** | `hermes-xiaozhi-plugin/` | Hermes channel plugin (HMAC verify + MessageEvent dispatch) | ~250 |
+| **M4** | `esp/xiaozhi-esp32/main/boards/otto-robot/` | ESP32 端 MCP tools (上游 12 + 自加 2: show_emoji + show_text = **14 个**) | ~70 |
+
+**总自写代码 ~1.4k LOC** (Python + C++).
+
+## 🔌 Channels (已接 + 计划)
+
+| Channel | 状态 | Handoff |
+|---|---|---|
+| xiaozhi (ESP32 voice) | ✅ 已接 | M1+M3+M4 |
+| hermes terminal (TUI) | ✅ 内置 | hermes 自带 |
+| webhook (HTTP POST) | ✅ 内置 | hermes 自带 |
+| Discord | ✅ 内置 | hermes 自带 |
+| Slack | ✅ 内置 | hermes 自带 |
+| Telegram | ✅ 内置 | hermes 自带 |
+| 飞书 (Lark) | 📋 计划 (H036) | [docs/handoffs/active/...036.md](docs/handoffs/active/2026-06-20-next-agent-bootstrap-036.md) |
+| 微信 | 📋 计划 | (受 API 限制, polish 项) |
+| Cron (定时触发) | ✅ 部分 (需 channel registry 注册 cron_deliver) | (H037) |
+
+## 🎓 关键决策
+
+| ADR | 决定 | 影响 |
+|---|---|---|
+| [0001](docs/adr/0001-adopt-agent-arch.md) | 采纳三角色 agent 协作 (planner/executor/auditor) | 整个开发流程 |
+| [0005](docs/adr/0005-openai-compat-transcript-egress.md) | M3 transcript 走 OpenAI-compat messages, 不走 MCP callback | 实现量 5-6 → 1-2 天 |
+| [0006](docs/adr/0006-hermes-agent-backend-voice-replace-llm.md) | voice → hermes-z 替换 LLM (项目最终形态) | 答辩高光 |
+| [0007](docs/adr/0007-hybrid-backend-router.md) | Hybrid router: motor → raw DeepSeek+tools; 其余 → hermes-z | 保留舵机能力 + 保留 hermes 工具能力 |
+
+完整列表: [docs/adr/INDEX.md](docs/adr/INDEX.md).
 
 ## 📚 项目文档
 
 | 文档 | 内容 |
-|------|------|
-| [`docs/architecture.md`](docs/architecture.md) | 高保真架构图、组件清单、协议层、选型理由 |
-| [`docs/roadmap.md`](docs/roadmap.md) | 4 周路线图、验收标准、风险列表、降级方案 |
-| [`docs/demo-script.md`](docs/demo-script.md) | 4 分钟答辩 Demo 脚本（含 8 个评委问答准备）|
-| [`docs/research-notes.md`](docs/research-notes.md) | 选型调研笔记，可作课程报告"相关工作"章节素材 |
+|---|---|
+| [docs/DEPLOY.md](docs/DEPLOY.md) | **完整部署指南** (硬件 BOM + 软件依赖 + 一键 quickstart + troubleshooting) |
+| [docs/architecture.md](docs/architecture.md) | 高保真架构图、组件清单、协议层 |
+| [docs/adr/INDEX.md](docs/adr/INDEX.md) | 7 个架构决策记录 |
+| [docs/demo-script-h033.md](docs/demo-script-h033.md) | 答辩 demo 脚本 (6 take + Q&A + 数据页) |
+| [docs/handoffs/INDEX.md](docs/handoffs/INDEX.md) | 35+ 开发 handoff 流水 (从 hello world 到 voice 真闭环) |
+| [docs/retros/week0.md](docs/retros/week0.md) | 第 1 周复盘 (16 bitter lessons) |
+| [CLAUDE.md](CLAUDE.md) | 三角色 agent 协作纪律 (给 AI 助手用) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献指南 |
+| [ROADMAP.md](ROADMAP.md) | 短期/中期/长期路线图 |
+| [docs/xiaohongshu-drafts.md](docs/xiaohongshu-drafts.md) | 3 版小红书宣传文案 |
 
----
-
-## 📋 项目简介
-
-[小智 AI 聊天机器人](https://github.com/78/xiaozhi-esp32) 是一个开源的 ESP32-S3 智能语音助手项目。本仓库选用其中的 **OttoRobot 形态**（双足舵机机器人 + 小屏幕 + 麦克风 + 喇叭）作为期末作业硬件。
-
-### 核心功能
-
-- 🌐 Wi-Fi 连接 + 4G 网络（ML307，可选）
-- 🎤 离线语音唤醒（ESP-SR）
-- 🤖 流式 ASR → LLM → TTS 语音对话
-- 🖥️ OLED / LCD 屏幕显示、表情动画
-- 🦴 OttoRobot 双足舵机动作控制
-- 📷 可选摄像头（OV2640 / OV3660）
-- 🎛️ 网页 WebSocket 控制面板
-
----
-
-## 🔧 环境要求
-
-| 工具 | 版本 |
-|------|------|
-| Ubuntu | 22.04 / 24.04 |
-| **ESP-IDF** | **v5.5.2 或更新**（上游硬性要求）|
-| 目标芯片 | ESP32-S3 |
-| Python | 3.8+ |
-
----
-
-## 🚀 快速开始
-
-### 1. 安装 ESP-IDF 5.5.2（一次性）
+## 🛠️ 开发
 
 ```bash
-# 推荐独立安装一份，与可能存在的其他 IDF 版本分开
-git clone -b v5.5.2 --recursive https://github.com/espressif/esp-idf.git ~/esp-idf-5.5.2
-cd ~/esp-idf-5.5.2
-./install.sh esp32s3
+# 跑各模块测试 (31 tests total)
+cd xiaozhi-mcp-adapter && PYTHONPATH=src python -m pytest tests/   # 6/6
+cd openai-shim && PYTHONPATH=src python -m pytest tests/           # 20/20
+cd hermes-xiaozhi-plugin && PYTHONPATH=src python -m pytest tests/ # 5/5
 
-# ⚠️ 如果 clone 时没带 --recursive，必须立刻补这一句，否则后续 build 会崩
-# （报 "Missing esp-mqtt submodule" 之类）。不要带 --depth=1，会在
-# components/bt/controller/lib_esp32c3_family 处中断
-git submodule update --init --recursive
+# 看 hermes 真实时 reason
+tail -f ~/.hermes/logs/agent.log
 ```
-
-每次新开终端都要激活：
-
-```bash
-source ~/esp-idf-5.5.2/export.sh
-```
-
-> 💡 建议在 `~/.bashrc` 加一个 alias：`alias get_idf552='source ~/esp-idf-5.5.2/export.sh'`
-
-### 2. 克隆本仓库（含 submodule）
-
-```bash
-cd ~/code
-git clone --recurse-submodules https://github.com/kkLullaby/GBURobotClassFinalProject.git
-cd GBURobotClassFinalProject/esp/xiaozhi-esp32
-```
-
-> ⚠️ 如果忘了 `--recurse-submodules`，进项目后补一句：
-> `git submodule update --init --recursive`
-
-### 3. 选择板子类型 ⚠️ 关键步骤
-
-```bash
-source ~/esp-idf-5.5.2/export.sh
-idf.py set-target esp32s3
-idf.py menuconfig
-```
-
-进入 menuconfig 后：
-
-```
-→ Xiaozhi Assistant
-  → Board Type
-    → 选择  ottoRobot       ← 必须选这个！（Kconfig prompt 实际是小写 o + 驼峰）
-```
-
-> ❗ **默认是 `Bread Compact WiFi`（面包板版），引脚映射与 Otto 硬件完全不同**。
-> 选错板子会导致烧录后屏幕黑屏、麦克风/喇叭无声、按键无响应。
-
-保存退出（`S` → 回车 → `Q`）。
-
-### 4. ⚠️ OTTO_ROBOT 板：menuconfig 之后必须 append 3 个 CONFIG
-
-上游 README 漏说，但 `main/boards/otto-robot/config.json` 的 `sdkconfig_append`
-要求 3 个 CONFIG，没有它们 build 会在 2206/2212 处崩
-（`websocket_control_server.cc` 报 `httpd_ws_*` 未声明）：
-
-```bash
-cat >> sdkconfig <<'EOF'
-
-# OTTO_ROBOT 板要求 (from main/boards/otto-robot/config.json sdkconfig_append)
-CONFIG_HTTPD_WS_SUPPORT=y
-CONFIG_CAMERA_OV2640=y
-CONFIG_CAMERA_OV3660=y
-EOF
-```
-
-### 5. 编译 + 烧录 + 串口监视
-
-```bash
-idf.py build flash monitor    # 全冷 build ~7 min
-```
-
-退出 monitor：`Ctrl + ]`
-
----
-
-## 🔄 跟踪上游更新
-
-```bash
-# 进入子目录拉取 xiaozhi-esp32 最新代码
-cd esp/xiaozhi-esp32
-git fetch origin
-git checkout main
-git pull origin main
-
-# 回到 super-repo，记录子模块新版本
-cd ../..
-git add esp/xiaozhi-esp32
-git commit -m "chore: bump xiaozhi-esp32 to upstream main"
-```
-
----
-
-## 📁 仓库结构
-
-```
-final_pro_xiaozhi_robot/
-├── .gitignore                  # 排除 build/、managed_components/、esp-idf/
-├── README.md                   # 本文件
-└── esp/
-    └── xiaozhi-esp32/          # 78/xiaozhi-esp32 的 gitlink（上游原版）
-        ├── main/boards/otto-robot/   # OttoRobot 板子专用代码
-        ├── sdkconfig.defaults.esp32s3
-        └── ...
-```
-
-> 📝 `esp/esp-idf/` 不入库 —— 开发者各自安装到 `~/esp-idf-5.5.2`。
-
----
-
-## 🔍 常见问题
-
-### Q: `idf.py set-target esp32s3` 时 version solving failed？
-
-A: 确认 IDF 版本 ≥ 5.5.2：`idf.py --version`。若仍是 5.3.x，需要重新 source 5.5.2 的 `export.sh`。
-
-### Q: 编译时找不到 `esp_video_init.h` 之类的头文件？
-
-A: 通常是组件没拉全。在 `esp/xiaozhi-esp32/` 里执行：
-```bash
-rm -rf build managed_components dependencies.lock
-idf.py reconfigure
-```
-
-### Q: 烧录后屏幕黑、按键无效？
-
-A: **99% 是板子类型没选对**。重新 `idf.py menuconfig` → `Xiaozhi Assistant` → `Board Type` → `Otto Robot`。
-改完后需要清干净再编：`rm -rf build sdkconfig && idf.py set-target esp32s3 && idf.py menuconfig`。
-
-### Q: 我之前那一套 ESP-IDF 5.3.2 + 大量降级 hack 的代码呢？
-
-A: 已经在 git 历史里。子目录 `esp/xiaozhi-esp32/` 的 `backup-pre-cleanup-20260616` 分支保留了当时的完整状态，可以 `git checkout backup-pre-cleanup-20260616` 切回去查看。
-
-### Q: flash 后串口 `/dev/ttyUSB0` 不存在？
-
-A: ESP32-S3 OttoRobot 用内置 USB-OTG，串口是 **`/dev/ttyACM0`** 不是 `ttyUSB0`。
-先 `ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null` 看实际名字，再
-`idf.py -p /dev/ttyACM0 flash monitor`。
-
-### Q: flash 完后 monitor 卡在 `waiting for download`？
-
-A: 烧完没自动 reset。**按板上 RST 键** 一下，板子进 normal boot，monitor
-会立刻出现 `Booting` / `Free heap` 日志。不要 Ctrl+] 退出 monitor。
-
-### Q: 第一次烧完没 wifi，怎么配？
-
-A: 走 BluFi 蓝牙配网。用手机装 "EspBlufi" / "ESP-Touch" / 类似 app，扫到
-ESP32 蓝牙广播后传 SSID + 密码。详细见上游
-[`esp/xiaozhi-esp32/docs/blufi_zh.md`](esp/xiaozhi-esp32/docs/blufi_zh.md)。
-
-### Q: 对机器人说"小智"，ASR 识别成"小子"？
-
-A: 默认 FunASR SenseVoice 模型对"智"发音识别不稳；不影响 LLM 理解（DeepSeek
-能从上下文猜出来），后期可换更精准的 ASR provider 解决。
-
----
 
 ## 🙏 致谢
 
-- 上游项目 [78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32) 及虾哥团队
-- [Espressif ESP-IDF](https://github.com/espressif/esp-idf)
-- OttoRobot 社区
+- 上游 [78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32) (虾哥 + 社区)
+- [Nous Research / Hermes Agent](https://github.com/NousResearch/hermes-agent)
+- [xinnan-tech / xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server)
+- [Espressif ESP-IDF](https://github.com/espressif/esp-idf) + ESP-SR + ESP-CAM
+- [DeepSeek](https://www.deepseek.com/) (主要 LLM 后端, 也支持 OpenAI / Anthropic / Ollama / Nous Portal)
+- 大湾区大学机器人课师生 (项目摇篮)
+
+## 📜 LICENSE
+
+[MIT](LICENSE).
+
+子模块 `esp/xiaozhi-esp32/` 是上游 78/xiaozhi-esp32 (MIT) 的 gitlink, 未修改源码.
+
+---
+
+## English
+
+**xiaozhi-robot** — embedding open-source AI Agent into an ESP32-S3 desktop robot.
+
+### One-liner
+
+Make the ESP32-S3 OttoRobot the first **physical embodiment** of [Hermes Agent](https://github.com/NousResearch/hermes-agent). Not yet another smart speaker — a desktop AI assistant that **listens and actually does things**:
+
+- Say **"wave hand"** → 🤚 servo really moves (DeepSeek via hybrid router calls `self_otto_action(hand_wave)`)
+- Say **"check final folder contents"** → 🔊 speaker reads real directory names (hermes-z really runs `ls` + DeepSeek summarizes)
+- Say **"git log latest 3 commits"** → 🔊 speaker reads real commit info
+
+**Really doing things, not playback.**
+
+### Innovation (in topology, not hardware)
+
+| | Smart speaker (Alexa-like) | xiaozhi-robot |
+|---|---|---|
+| Backend | Vendor-locked | OpenAI-compatible, swappable |
+| Protocol | Proprietary RPC | Standard MCP + Hermes channel ABI |
+| Tool extension | Built-in skills | hermes-z + any MCP server |
+| Channel mesh | Single device | hermes multi-channel coordination |
+| Physical actions | None | OttoRobot 26 servo motions + 21 emojis + screen text |
+| Open source | ❌ | ✅ (MIT) |
+
+### Architecture
+
+```
+ESP32-S3 OttoRobot ←── WiFi ──→ xinnan-tech docker server (STT/TTS/WebSocket)
+                                          ↓ OpenAI-compat HTTP
+                                  openai-shim (FastAPI)
+                                          ↓ Hybrid Router on user text
+                           ┌──────────────┴──────────────┐
+                    motor keyword              other (query/chat)
+                           ↓                              ↓
+                  raw_deepseek_proxy            HermesAgentBackend
+                  (tools passthrough)           (hermes -z + tools)
+                           ↓                              ↓
+                   DeepSeek tool_calls           shell/file/git/browser/...
+                           ↓                              ↓
+                  xinnan-tech execute            stdout → SSE → speaker
+                           ↓
+                  mcp_endpoint /call/ → ESP32
+                           ↓
+                       🤖 servo moves                    🔊 speaks
+```
+
+### Quickstart
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for full setup (BOM → working demo in ~3 hours).
+
+### Modules
+
+| Module | Path | Purpose | LOC |
+|---|---|---|---|
+| **M1** | `xiaozhi-mcp-adapter/` | Python sidecar bridging xiaozhi MCP endpoint | ~600 |
+| **M2** | `openai-shim/` | FastAPI OpenAI-compat shim + hybrid router | ~500 |
+| **M3** | `hermes-xiaozhi-plugin/` | Hermes channel plugin | ~250 |
+| **M4** | `esp/xiaozhi-esp32/main/boards/otto-robot/` | ESP32 MCP tools (14 total: 12 upstream + 2 added) | ~70 |
+
+Total self-written: ~1.4k LOC.
+
+### Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). PRs welcome for: new channels (Lark, Telegram), MCP tools, hardware variants, translations, replica showcases.
+
+### License
+
+[MIT](LICENSE).

@@ -26,3 +26,25 @@ __pycache__/
 # H1b 备份的 sdkconfig（不入库）
 esp/xiaozhi-esp32/sdkconfig.h1a-baseline
 esp/xiaozhi-esp32/sdkconfig.*.bak
+
+# Secrets / 本地凭据 — 任何 .env 文件
+.env
+.env.*
+!.env.example
+!.env.sample
+*.secret
+*.key
+*.pem
+
+# 本地运行时 cache / 日志
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 个人 dev tool 状态 (不应入库 — 用户各自配置)
+.claude/sessions/
+.claude/transcripts/
+.claude/memory/personal/
+.codex/sessions/

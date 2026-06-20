@@ -16,7 +16,7 @@
 ```bash
 # 验热点 IP
 ss -tln | grep -E ':(8000|8003|8004)\s'
-curl -sS http://10.206.218.66:8003/xiaozhi/ota/
+curl -sS http://<HOST_IP>:8003/xiaozhi/ota/
 
 # 起三件套 (sidecar / shim / gateway)
 pkill -9 -f 'uvicorn|hermes gateway'; sleep 3
@@ -24,7 +24,7 @@ pkill -9 -f 'uvicorn|hermes gateway'; sleep 3
 cd ~/code/robot_class/final_pro_xiaozhi_robot/xiaozhi-mcp-adapter
 unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
 nohup env PYTHONPATH=src \
-  MCP_ENDPOINT='ws://10.206.218.66:8004/mcp_endpoint/mcp/?token=yOHez59gwSMTNMiWL9zY4A0hQ5teG6P0xwjESC0xPUc%3D' \
+  MCP_ENDPOINT='ws://<HOST_IP>:8004/mcp_endpoint/mcp/?token=<YOUR_MCP_TOKEN>' \
   /home/kk/miniconda3/bin/python -m uvicorn xiaozhi_mcp_adapter.proxy_http:app \
     --host 127.0.0.1 --port 8650 \
   > /tmp/h030bis/sidecar.log 2>&1 & disown
