@@ -11,15 +11,16 @@ Last compacted: 2026-06-20
 
 ## Active (status: pending|claimed|blocked)
 
-(空 — 2026-06-20 demo 闭环, voice → hermes-z → tool → 喇叭真闭环 ✅)
+(空 — 2026-06-20 demo 真完整闭环, voice → hybrid router → motor (舵机真动) + chat/query (hermes-z + tool) ✅✅)
 
 并行 backlog（不阻塞答辩）：
-- H027 (planner self, ~30min): docs 集中回灌 13 项 bitter lessons (#17-#29; 含 H030.bis 新增 #27 mcp_endpoint /mcp/ vs /call/, #28 DeepSeek key 单一来源, #29 voice→hermes-z 是项目最终形态)
-- H032 (planner → auditor, ~30min): M3 batch review (hermes-xiaozhi-plugin + xiaozhi-mcp-adapter + HermesAgentBackend)
-- H034 (planner → executor, optional polish): sidecar 改走 mcp_endpoint /call/ client 注册让屏幕显字 dispatch 通
+- H027 (planner self, ~30min): docs 集中回灌 18 项 bitter lessons (#17-#34)
+- H032 (planner → auditor, ~30min): M3 + H033 + H035 batch review
+- H034 (optional polish): sidecar 改走 /call/ 让屏幕显字 dispatch 通 (注: H035 后 sidecar 不在 demo 主链, 优先级降)
 
 ## Recent done / archived (last 7 days)
 
+- [2026-06-20-m2-hybrid-backend-router-035](archive/2026-06-20-m2-hybrid-backend-router-035.md) planner self-task (done 2026-06-20): "HybridBackend router: motor 走 raw deepseek + tools 透传 (舵机真动), 其余 hermes-z (高光)" — H033 后发现 voice 控舵机能力丢失 (shim 截 tools), 写 router.py (motor keyword + has_otto_tools) + raw_deepseek_proxy.py (openai SDK stream + tools 透传) + app.py hybrid 分支; **9/9 router test PASS + 20/20 M2 full suite PASS**; 物理实测 "挥挥手" → docker server `执行工具: self_otto_action {action: hand_wave}` + **舵机真挥** ✅. **Bitter lesson #30-#34**: httpx async TLS 空错 → openai SDK; sync httpx 是 debug 神器; mcp_endpoint /mcp/ slot 单一 — sidecar + ESP32 mutual exclusive (本次抢占导致"一次能再次不能" — 杀 sidecar 修复); 第一直觉看进程/抢占而非改代码; DeepSeek function name pattern `^[a-zA-Z0-9_-]+$`
 - [2026-06-20-m2-hermes-agent-backend-033](archive/2026-06-20-m2-hermes-agent-backend-033.md) planner self-task (done 2026-06-20, commit a141541): "HermesAgentBackend: voice → hermes-z → tool call → 喇叭真说" — 把 shim 的 LLM 整个换成 `hermes -z PROMPT` subprocess; xinnan-tech 调 shim 时 spawn hermes, hermes 用 tool (shell/file/...) 完成任务, stdout 流回喇叭. **物理实测 2026-06-20 12:30**: voice "帮我看看 final 文件夹里面有什么目录" → hermes 真跑 ls + DeepSeek 总结 → 喇叭真说 "final文件夹里有五个目录: docs文档、esp固件、hermes小智插件、openai-shim接口层、xiaozhi-mcp-adapter适配器" (端到端 ~13s). 项目最大创新点最终形态. ADR-0006 落地. Bitter lessons #28-#29.
 - [2026-06-20-m3-physical-esp32-loop-030bis](archive/2026-06-20-m3-physical-esp32-loop-030bis.md) planner → user (done 2026-06-20, user + planner coach): "M3 物理最后一公里" — Stage 0 ~/.hermes/.env ✅ + Stage 1 H031 ✅ + Stage 2 voice → 喇叭 ✅✅ (超出原设计, 走 H033 LLM-replace 路径); Stage 3/4 (TUI send / cron 屏幕) 跳过因 H033 已更高维 demo; H024 flash ✅ tool count 14 ✅. **Bitter lesson #27**: mcp_endpoint /mcp/ vs /call/ 路径角色不同, sidecar→ESP32 屏幕 dispatch 留 H034 polish
 - [2026-06-20-m1-sidecar-real-pipe-031](archive/2026-06-20-m1-sidecar-real-pipe-031.md) planner → executor (done 2026-06-20, codex TestClient lifespan hang in sandbox + planner main-loop unblock per ADR-0003 II, commit 07c62f4): "M1 sidecar startup hook 真接 xiaozhi mcp_endpoint pipe" — `proxy_http.py` @app.on_event('startup') 读 `MCP_ENDPOINT` env + 调 `pipe_module.connect()` → `show_text_proxy._PIPE = pipe`; pipe.py 加 `WebSocketPipe` facade + `async connect(uri)`; **6/6 PASS in 1.68s** (H015 4 + H031 2); 物理 sidecar with 真 MCP_ENDPOINT → curl POST 200 OK + initialize handshake reply. **Bitter lesson #26**: codex TestClient lifespan hang in sandbox (Bitter lesson #18 复发)

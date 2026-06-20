@@ -12,6 +12,7 @@
 - [0004](0004-voice-input-callback-discord-only-confirmed.md) — 确认 _voice_input_callback 为 Discord-specific，降级 ADR-0001 pitfall #4，关闭 Week 3 Day 16 hard-stop（2026-06-18 created, 2026-06-19 activated）
 - [0005](0005-openai-compat-transcript-egress.md) — M3 transcript 走 OpenAI-compat `messages`（M2 升级为 transcript 入口）；M3 工作量 5-6 → 1-2 天（2026-06-19）
 - [0006](0006-hermes-agent-backend-voice-replace-llm.md) — HermesAgentBackend：shim 把 LLM 整个换成 `hermes -z` subprocess，让 voice → tool-call → 喇叭真说出 hermes 处理结果；ADR-0005 plugin fork 仍兼容堆叠不被 supersede（2026-06-20）
+- [0007](0007-hybrid-backend-router.md) — HybridBackend router：motor 类话走 raw DeepSeek + tools 透传（舵机真动），其余走 HermesAgentBackend（H033 高光）；ADR-0006 不被 supersede，只是 hybrid 模式让两路并存（2026-06-20）
 
 ## Drafts pending review
 
