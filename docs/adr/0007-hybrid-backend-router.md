@@ -109,6 +109,22 @@ voice "帮我看 final 文件夹有什么" (T1 H033)
 ### Bitter lessons absorbed
 
 - **#30-#34** 见 H035 handoff archive 末尾.
+- **#43-#47 (H038 incident, 2026-06-20)**:
+  - **#43**: shim 默认 backend=echo (`app.py:49`), 重启忘带 `OPENAI_SHIM_BACKEND=hybrid`
+    → voice 全程只回 `echoed: <content>`, 任何 motor/tool 路径都死. **必须**用
+    `scripts/start_shim.sh` 封装启动, 绝不靠记忆敲 env 命令行.
+  - **#44**: clash-verge 同时设 `ALL_PROXY` (uppercase) + `all_proxy` (lowercase,
+    **bare `socks://`**). httpx 优先 lowercase, init 即抛 `ValueError: Unknown
+    scheme for proxy URL`. Even after `export ALL_PROXY=socks5://...`, 小写仍污染.
+    fix = unset 全部大小写 8 个 (ALL_PROXY/all_proxy/HTTP_PROXY/http_proxy/...) 再 export.
+  - **#45**: DeepSeek 域名被 clash fake-ip 池污染 (`28.0.0.7`), 无代理时 TLS 死;
+    与 #36 (lark feishu 必须关代理) 冲突. 解 = `NO_PROXY=open.feishu.cn,open.larksuite.com`
+    让 feishu 走 direct, DeepSeek/hermes 走 proxy.
+  - **#46**: `nohup python -m uvicorn` 后 Python import ~3s 才 bind 端口.
+    `ss` + `tail` 跑太快误判崩了, 实际还在 import. 标准纪律 = 等 ≥3s.
+  - **#47**: 任何 demo 命令文档**永远不**写 `sk-xxx` 示例 (会被 user 误读成可粘真值
+    并 paste 进会话, 让真 key 进会话日志). 用 `sk-粘贴你的真实key` 或
+    "从 `~/.config/<svc>/.env` 读" 形式.
 
 ## Implementation
 
