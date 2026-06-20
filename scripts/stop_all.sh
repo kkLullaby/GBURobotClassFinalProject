@@ -16,7 +16,13 @@ if pgrep -f 'openai_shim.app:app' >/dev/null; then
   ok "killed shim"
 else warn "shim 没在跑"; fi
 
-# 2. sidecar (若有)
+# 2. lark-event-listener (飞书 inbound)
+if pgrep -f 'lark_event_listener.main' >/dev/null; then
+  pkill -9 -f 'lark_event_listener.main'
+  ok "killed lark_event_listener"
+fi
+
+# 3. sidecar (若有)
 if pgrep -f xiaozhi_mcp_adapter >/dev/null; then
   pkill -9 -f xiaozhi_mcp_adapter
   ok "killed sidecar"

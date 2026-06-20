@@ -45,7 +45,7 @@ XINNAN_CONFIG="$XINNAN_DIR/data/.config.yaml"
 # ──────────────────────────────────────────────────────────────────────
 # Step 1: pre-flight 检查
 # ──────────────────────────────────────────────────────────────────────
-step "Step 1/7 pre-flight 检查"
+step "Step 1/8 pre-flight 检查"
 
 PREFLIGHT_OK=1
 
@@ -101,7 +101,7 @@ else ok "mcp-endpoint compose"; fi
 # ──────────────────────────────────────────────────────────────────────
 # Step 2: 检测笔记本当前 IP, 对比 xinnan-tech config 里的 ESP32 server URL
 # ──────────────────────────────────────────────────────────────────────
-step "Step 2/7 检测 IP + 同步 xinnan-tech config"
+step "Step 2/8 检测 IP + 同步 xinnan-tech config"
 
 # wlp0s20f3 是这台机器的 wifi 接口名, 别的机器改这里
 WIFI_IFACE=$(ip -4 -o addr show | awk '$2 ~ /^wl/ && $4 ~ /^[0-9]/ {print $2; exit}')
@@ -143,7 +143,7 @@ EOF
 # ──────────────────────────────────────────────────────────────────────
 # Step 3: 启动 docker 容器 (mcp-endpoint + xiaozhi-esp32-server)
 # ──────────────────────────────────────────────────────────────────────
-step "Step 3/7 起 docker 容器"
+step "Step 3/8 起 docker 容器"
 
 # mcp-endpoint-server
 if docker ps --format '{{.Names}}' | grep -q '^mcp-endpoint-server$'; then
@@ -179,7 +179,7 @@ done
 # ──────────────────────────────────────────────────────────────────────
 # Step 4: 释放 mcp_endpoint slot (kill sidecar) — bitter lesson #32
 # ──────────────────────────────────────────────────────────────────────
-step "Step 4/7 释放 mcp_endpoint slot (#32)"
+step "Step 4/8 释放 mcp_endpoint slot (#32)"
 
 if pgrep -f xiaozhi_mcp_adapter >/dev/null; then
   pkill -9 -f xiaozhi_mcp_adapter
@@ -192,7 +192,7 @@ fi
 # ──────────────────────────────────────────────────────────────────────
 # Step 5: 起 shim (hybrid mode)
 # ──────────────────────────────────────────────────────────────────────
-step "Step 5/7 起 openai-shim (hybrid)"
+step "Step 5/8 起 openai-shim (hybrid)"
 
 bash "$REPO_ROOT/scripts/start_shim.sh"
 info "等 uvicorn import (≥3s, bitter #46)..."
@@ -216,7 +216,31 @@ fi
 # ──────────────────────────────────────────────────────────────────────
 # Step 6: smoke (motor 路径不真发 voice, 走 HTTP)
 # ──────────────────────────────────────────────────────────────────────
-step "Step 6/7 smoke (motor 路径 + hermes 路径各 1 发)"
+step "Step 6/8 起 lark-event-listener (飞书 inbound)"
+
+if [ ! -f "$LARK_ENV" ]; then
+  warn "$LARK_ENV 缺失 → 跳过 lark listener (飞书 inbound 不可用,但 voice/lark outbound 仍正常)"
+else
+  bash "$REPO_ROOT/scripts/start_lark_listener.sh" || warn "lark listener 启动失败,看 /tmp/lark_listener.log"
+  # 等 lark_oapi.ws.Client 完成 import + 拿 conn_url + 建立长连接 (~3-5s)
+  sleep 4
+  if pgrep -f 'lark_event_listener.main' >/dev/null; then
+    ok "lark listener 进程在跑 PID=$(pgrep -f 'lark_event_listener.main' | head -1)"
+    # 看 log 是否真握上手 (没握上手意思是 .env 凭证错 / 飞书后台没开长连接订阅)
+    if grep -q 'connected\|starting' /tmp/lark_listener.log 2>/dev/null; then
+      ok "lark ws 长连接已建立 (或正在建立) — log: /tmp/lark_listener.log"
+    else
+      warn "lark listener 起了但 log 没握手痕迹 — tail /tmp/lark_listener.log 看错"
+    fi
+  else
+    fail "lark listener 进程没起来 — cat /tmp/lark_listener.log"
+  fi
+fi
+
+# ──────────────────────────────────────────────────────────────────────
+# Step 7: smoke (motor 路径不真发 voice, 走 HTTP)
+# ──────────────────────────────────────────────────────────────────────
+step "Step 7/8 smoke (motor 路径 + hermes 路径各 1 发)"
 
 info "motor smoke: '挥挥手' → 期望 DeepSeek stream chunk"
 RESP=$(timeout 20 curl -sS -N -X POST http://localhost:8089/v1/chat/completions \
@@ -236,9 +260,9 @@ else
 fi
 
 # ──────────────────────────────────────────────────────────────────────
-# Step 7: 完成 + cheatsheet
+# Step 8: 完成 + cheatsheet
 # ──────────────────────────────────────────────────────────────────────
-step "Step 7/7 全部就绪!"
+step "Step 8/8 全部就绪!"
 
 cat <<EOF
 
@@ -253,8 +277,15 @@ ${GRN}${BOLD}对机器人讲话测试:${CLR}
        → hermes 调 lark_send_message_to_self → 飞书真到 (~30-60s)
        → 喇叭说 "已发送"
 
+${GRN}${BOLD}飞书 → ottagent (inbound) 测试:${CLR}
+  打开飞书 → 找到 ottagent app 私聊 → 发任意文本 (如 "你好")
+       → lark-event-listener 收到 event
+       → spawn hermes -z → 调 lark_send_message_to_self 工具
+       → 飞书私聊收到 ottagent 回复 (~30-60s)
+
 ${BLU}${BOLD}实时观察:${CLR}
-  tail -f /tmp/shim.log                              # shim 路由日志
+  tail -f /tmp/shim.log                              # voice 链路 (shim 路由)
+  tail -f /tmp/lark_listener.log                     # 飞书 inbound 链路
   docker logs -f --tail 20 xiaozhi-esp32-server      # ESP32 ↔ server 对话
   docker logs -f --tail 20 mcp-endpoint-server       # tool dispatch
 

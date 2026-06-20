@@ -14,6 +14,7 @@
 - [0006](0006-hermes-agent-backend-voice-replace-llm.md) — HermesAgentBackend：shim 把 LLM 整个换成 `hermes -z` subprocess，让 voice → tool-call → 喇叭真说出 hermes 处理结果；ADR-0005 plugin fork 仍兼容堆叠不被 supersede（2026-06-20）
 - [0007](0007-hybrid-backend-router.md) — HybridBackend router：motor 类话走 raw DeepSeek + tools 透传（舵机真动），其余走 HermesAgentBackend（H033 高光）；ADR-0006 不被 supersede，只是 hybrid 模式让两路并存（2026-06-20）
 - [0008](0008-lark-mcp-server-integration.md) — lark-mcp-server：把飞书 OpenAPI 暴露成 stdio MCP server 接入 hermes，让 voice "发个飞书消息"真到达；ADR-0007 hybrid 不动（2026-06-20）
+- [0009](0009-lark-inbound-long-connection.md) — lark-event-listener：长连接接飞书 IM event → spawn hermes -z → 调 lark tool 回复，把飞书闭环成双向 channel；D1 spike 决定砍 xiaozhi_say（2026-06-20）
 
 ## Drafts pending review
 
