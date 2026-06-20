@@ -90,11 +90,46 @@ class EventDeduplicator:
         return False
 
 
+def _hermes_env() -> dict:
+    """Build env for hermes subprocess.
+
+    Listener itself runs with proxy unset (feishu must direct, fake-ip pool
+    will eat it otherwise — bitter lesson #45). But hermes calls DeepSeek
+    which lives on `api.deepseek.com`, also in the fake-ip pool when clash
+    is on. So we re-inject proxy here, but with `NO_PROXY=feishu` so any
+    feishu calls hermes spawn (via lark tool subprocess) still go direct.
+
+    Override via env: HERMES_SPAWN_PROXY=socks5://127.0.0.1:7897 (default),
+    HERMES_SPAWN_NO_PROXY=open.feishu.cn,open.larksuite.com (default).
+    Set HERMES_SPAWN_PROXY='' to disable injection.
+    """
+    proxy = os.environ.get("HERMES_SPAWN_PROXY", "socks5://127.0.0.1:7897")
+    no_proxy = os.environ.get(
+        "HERMES_SPAWN_NO_PROXY",
+        "localhost,127.0.0.1,open.feishu.cn,open.larksuite.com",
+    )
+    env = {**os.environ}
+    if proxy:
+        # http(s)_proxy may stay scheme=http even with socks upstream because
+        # most clients route via proxychains-style; mirror what start_shim.sh
+        # does to be safe.
+        env["ALL_PROXY"] = proxy
+        env["all_proxy"] = proxy
+        env["HTTPS_PROXY"] = proxy if proxy.startswith("http") else "http://127.0.0.1:7897"
+        env["HTTP_PROXY"] = env["HTTPS_PROXY"]
+        env["https_proxy"] = env["HTTPS_PROXY"]
+        env["http_proxy"] = env["HTTPS_PROXY"]
+        env["NO_PROXY"] = no_proxy
+        env["no_proxy"] = no_proxy
+    return env
+
+
 async def spawn_hermes(prompt: str, *, timeout_s: float = DEFAULT_TIMEOUT_S) -> tuple[int, str, str]:
     """Spawn `hermes -z PROMPT --yolo --accept-hooks`, capture all output.
 
     Returns (returncode, stdout, stderr). Pattern mirrors
-    `openai_shim.hermes_agent_backend.HermesAgentBackend.stream_response`.
+    `openai_shim.hermes_agent_backend.HermesAgentBackend.stream_response`,
+    plus re-injects proxy for DeepSeek (bitter lesson #51, see ADR-0009).
     """
     cmd = [DEFAULT_HERMES_BIN, "-z", prompt, "--yolo", "--accept-hooks"]
     LOG.info("spawn hermes: %s ...", shlex.join(cmd[:3]))
@@ -104,7 +139,7 @@ async def spawn_hermes(prompt: str, *, timeout_s: float = DEFAULT_TIMEOUT_S) -> 
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        env={**os.environ},
+        env=_hermes_env(),
     )
     try:
         out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)

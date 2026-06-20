@@ -136,6 +136,15 @@ demo 时可以同时玩两条线。
   内部要 dispatch 到 async handler 必须 `asyncio.get_event_loop().create_task`,
   否则 await 不起来。lark_oapi.ws.Client 内部维护一个 loop 给 callback
   跑同步 — 注意不要在 callback 里直接 `await`。
+- **#51 (本 ADR, 物理验证时发现)**: listener 本身跑在 proxy 全 unset 的
+  环境 (飞书 open.feishu.cn 必须直连,否则被 clash fake-ip 池污染),
+  但 `asyncio.create_subprocess_exec(env={**os.environ})` 会把这个空
+  proxy env **原样传给 hermes 子进程**,导致 hermes 调 DeepSeek 也走
+  fake-ip → `Connection error after 3 retries`。修复:`spawn_hermes`
+  必须**重建** env, 给 hermes 注入 `ALL_PROXY=socks5://...` (大小写都设,
+  bitter lesson #44) + `NO_PROXY=open.feishu.cn,open.larksuite.com`,
+  让 hermes 调用的飞书 tool 仍走直连。本质上这是 #44+#45 在父子进程
+  边界的复现 — 父进程的 env 决定不是子进程 env 想要的。
 
 ## References
 
