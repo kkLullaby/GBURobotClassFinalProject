@@ -4,7 +4,7 @@ from: planner
 to: user
 parent: 2026-06-20-m3-end-to-end-demo-030
 supersedes:
-status: pending
+status: done
 created: 2026-06-20
 artifacts:
   - 仓库外: ~/.hermes/.env (新, 含 unset proxy + ALLOW_ALL_USERS + XIAOZHI_* env)
@@ -203,3 +203,81 @@ review M1 sidecar 真接 + M3 plugin + adapter + 端到端 demo;
   cron_deliver_env_var? (read ntfy adapter:register, 见 cron_deliver_env_var
   字段; XiaoZhi register 没设, 可能需补)
 - 真答辩用哪 3 个 voice query? (H030.bis done 后写 docs/demo-script.md)
+
+---
+
+## User + Planner Coach Done (2026-06-20)
+
+H031 unblock 后 user 在 planner 指导下完成 Stage 0→2 物理实测，但**实际超出
+设计预期**——发现了一条比 plugin webhook 更强的链路：**voice → hermes-z
+→ tool call → 喇叭真说**（HermesAgentBackend，commit a141541，归档为 H033）。
+
+### Stage 0 — env 文件 ✅
+```bash
+~/.hermes/.env 含:
+- GATEWAY_ALLOW_ALL_USERS=true
+- XIAOZHI_WEBHOOK_PORT=8645 + HOST=127.0.0.1
+- XIAOZHI_DEVICE_ID=ac:a7:04:30:91:78
+- XIAOZHI_MCP_ADAPTER_URL=http://127.0.0.1:8650
+- XIAOZHI_WEBHOOK_SECRET=<H028.bis secret>
+```
+
+### Stage 1 — H031 sidecar 真接 pipe ✅
+见 [2026-06-20-m1-sidecar-real-pipe-031.md](2026-06-20-m1-sidecar-real-pipe-031.md)
+done 段。sidecar POST /tools/show_text 真返 200 OK + initialize handshake reply
+(jsonrpc method=initialize)。
+
+### Stage 2 — Voice → Display ⚠️ partial / Voice → 喇叭 ✅✅
+- ESP32 H024 物理 flash ✅ (3.69 MiB, MAC `ac:a7:04:30:91:78`, 烧 18.7s)
+- 启动 boot log 进 listening ✅
+- xinnan-tech docker server log 真打:
+  ```
+  收到mcp消息: tools: [
+    self.otto.show_emoji (21 emotions: happy/laughing/...),
+    self.otto.show_text (≤30 汉字, kind=chat/notification)
+  ]
+  ```
+  → **tool count = 14 (12 上游 + 2 H024 加)** ✅
+- voice "现在几点了？" → STT 成功 "现在几点了？" → server LLM (shim with
+  hermes_agent backend) → hermes-z → DeepSeek → 喇叭真说 "现在凌晨4点15分啦"
+  ✅ (server clock 错, 不影响链路)
+- voice "帮我看看 final 文件夹里面有什么目录" → **喇叭真说**:
+  > "final文件夹里有五个目录: docs文档、esp固件、hermes小智插件、
+  >  openai-shim接口层、还有xiaozhi-mcp-adapter适配器"
+  端到端 ~20s (411s STT → 421s 第一句喇叭, 424s 完整)。**这就是答辩高光**。
+
+- sidecar → ESP32 屏幕 dispatch: sidecar POST 200 OK 但屏幕未显字
+  (mcp_endpoint /mcp/ vs /call/ 角色分工; sidecar 注册成 MCP 服务器, 不能
+  反向调 ESP32). Bitter lesson #27: mcp-endpoint-server 两条 ws 路径分别给
+  client/server 用; M1 sidecar 走 /mcp/ 时是 server 身份, 不能发 tools/call
+  到 ESP32. 留 H034 后续 polish.
+
+### Stage 3-4 — TUI send / Cron ⏸ deferred
+voice → hermes-z → 喇叭 已超出原 Stage 2-4 设计的"屏幕显字"目标; user 选择
+跳过 Stage 3/4, 直接 commit + 收尾 + 录答辩 demo (H033 路线赢)。
+
+### Stage 5 — 录屏
+TODO (留下一步, 趁链路全开)。
+
+## What I Did (final)
+
+- ✅ H024 ESP32 flash + tool count 14 验证
+- ✅ H031 sidecar 真接 mcp_endpoint pipe (200 OK initialize handshake)
+- ✅ H030 chain: hermes plugin webhook + adapter.send + HMAC 全 7/7 复验
+- 🚀 **H033 HermesAgentBackend**: voice → hermes-z → tool call (shell) →
+  喇叭真说出真实文件系统内容 (commit a141541)
+- ⏸ Stage 3 (TUI send) + Stage 4 (cron) 跳过, 因 H033 路线已是更高维 demo
+
+## Bitter Lessons (for H027 retro batch)
+
+- **#27** mcp-endpoint-server `/mcp/` (server 注册) vs `/call/` (client 注册)
+  两条 ws 路径角色不同, sidecar 走 /mcp/ 是 server 不能反向 tools/call → ESP32
+  屏幕 dispatch 用 sidecar 单向链不通; 真要让屏幕显字需 sidecar 走 /call/ 注册
+  为 client 或绕过 mcp_endpoint 直发 xinnan-tech ws
+- **#28** DeepSeek key 必须从 docker `data/.config.yaml` 单一来源 reuse,
+  Step 4.2 占位符 `<sk->` 不替换 → shim 401 → server fallback "小智有点忙"
+  → 30 分钟 debug 才发现. 后续命令模板里 key 不应该让 user 手 paste,
+  直接 `$(grep api_key data/.config.yaml | head -1 | awk ...)` 即取
+- **#29** voice → hermes-z 这条 LLM-replace 路径比 plugin webhook fork
+  更直接, latency 5-25s, 但 hermes 真能调 tool. 项目最大创新点的最终形态
+  是 "voice 操控 hermes agent", 不是 "voice 同时进两个 LLM"
