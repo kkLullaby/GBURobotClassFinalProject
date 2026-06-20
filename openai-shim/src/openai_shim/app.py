@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 from .deepseek_backend import DeepSeekBackend
 from .echo_backend import EchoBackend, TextBackend
+from .hermes_agent_backend import HermesAgentBackend
 from .hermes_backend import HermesBackend
 from .sse import chat_completion_sse
 
@@ -43,6 +44,10 @@ def _build_backend() -> TextBackend:
             api_key=api_key,
             base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
         )
+    elif backend_kind == "hermes_agent":
+        # voice → hermes -z → tool calls → speak result
+        # (HermesBackend transcript fork still applies on top if HERMES_TRANSCRIPT_URL set)
+        inner = HermesAgentBackend()
     else:
         inner = EchoBackend()
 
