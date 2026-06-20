@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# Build
+build/
+dist/
+*.egg
+
+# Local secrets (real lives in ~/.config/lark-mcp/.env, chmod 600)
+.env
+.env.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
