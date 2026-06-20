@@ -4,7 +4,7 @@ from: planner
 to: executor
 parent: 2026-06-20-m3-end-to-end-demo-030
 supersedes:
-status: pending
+status: done
 created: 2026-06-20
 artifacts:
   - xiaozhi-mcp-adapter/src/xiaozhi_mcp_adapter/proxy_http.py (改：加 startup hook 接真 pipe)
@@ -167,3 +167,114 @@ H030.bis + H031) 全 done 后 batch review (留 H032).
   接住; 本 handoff done 后 _PIPE 有真 pipe 但 ws connect 失败时行为? (留
   H030.bis user 物理验)
 - pipe.close() 上游 78/mcp-calculator 是否支持优雅关? (sandbox 测 mock 就行)
+
+## Executor's Reading
+### What I'll do
+- Add a scoped M1 sidecar startup/shutdown hook that populates the show_text pipe from `MCP_ENDPOINT`, add a minimal `pipe.connect()` wrapper if needed, and verify the new lifecycle behavior with mock-only pytest coverage.
+
+### Assumptions made
+- [LOW] I will not create a separate `docs/superpowers/plans/` plan file even though the writing-plans skill normally recommends it, because this handoff explicitly constrains executor writes to scoped code artifacts plus this handoff.
+- [MED] The new `pipe.connect(url)` wrapper should expose a lightweight stdin/stdout/close interface over a WebSocket while preserving the existing `run_forever()` bridge behavior unchanged.
+- [LOW] The sidecar should store live pipe state in `show_text_proxy._PIPE` and `post_show_text()` should read from that module state, matching this handoff's monkeypatch warning about copied references.
+
+## What I Did
+- Modified `xiaozhi-mcp-adapter/src/xiaozhi_mcp_adapter/show_text_proxy.py`:
+  - added module-level `_PIPE = None` for the sidecar runtime pipe state.
+- Modified `xiaozhi-mcp-adapter/src/xiaozhi_mcp_adapter/proxy_http.py`:
+  - added FastAPI startup hook that reads `MCP_ENDPOINT` and calls `pipe_module.connect(endpoint)`;
+  - startup stores the result in `show_text_proxy._PIPE`;
+  - shutdown awaits `show_text_proxy._PIPE.close()` when present and clears it;
+  - `/tools/show_text` now reads `show_text_proxy._PIPE`.
+- Modified `xiaozhi-mcp-adapter/src/xiaozhi_mcp_adapter/pipe.py`:
+  - added a `WebSocketPipe` stdin/stdout/close facade;
+  - added `async def connect(uri: str) -> WebSocketPipe`;
+  - preserved existing `run_forever()` / `_pipe_once()` behavior.
+- Added `xiaozhi-mcp-adapter/tests/test_proxy_http_pipe.py`:
+  - `test_startup_hook_skips_when_no_env`;
+  - `test_startup_hook_assigns_pipe_when_env`.
+- Did not modify M2/M3/M4/esp, did not touch `~/.hermes/`, did not run real sidecar, and did not connect to ESP32.
+- Ran a scoped non-socket pytest command before the full suite; it hung at the first `TestClient` lifespan test and did not reach PASS/FAIL. Per handoff error discipline, stopped and blocked before running the full `tests/` suite.
+
+Command:
+
+```bash
+cd xiaozhi-mcp-adapter
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+PYTHONPATH="src:$HOME/.local/share/uv/tools/hermes-agent/lib/python3.13/site-packages" /home/kk/miniconda3/bin/python -m pytest -xvs tests/test_proxy_http_pipe.py tests/test_show_text_proxy.py
+```
+
+Observed output before hang:
+
+```text
+============================= test session starts ==============================
+platform linux -- Python 3.13.9, pytest-9.1.0, pluggy-1.5.0 -- /home/kk/miniconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /home/kk/code/robot_class/final_pro_xiaozhi_robot/xiaozhi-mcp-adapter
+configfile: pyproject.toml
+plugins: anyio-4.14.0, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/test_proxy_http_pipe.py::test_startup_hook_skips_when_no_env 
+```
+
+Additional stop attempts:
+
+```text
+write_stdin Ctrl-C failed because stdin was already closed for the pytest exec session.
+pkill -f '/home/kk/miniconda3/bin/python -m pytest -xvs tests/test_proxy_http_pipe.py tests/test_show_text_proxy.py' produced no stdout and exited 143.
+```
+
+## Open Questions for Planner/User
+- The mock lifespan test hanging suggests `starlette.testclient.TestClient` is not a safe trigger path in this Codex sandbox. A next attempt should either use a tiny in-test ASGI lifespan driver that calls `proxy_http.start_pipe()` / `proxy_http.stop_pipe()` directly, or planner should rerun/fix in main-loop.
+
+---
+
+## Planner Unblock (2026-06-20 main-loop per ADR-0003 II)
+
+Codex blocked on `TestClient` lifespan hang in sandbox; planner main-loop reran
+in real env:
+
+```
+$ PYTHONPATH=src python -m pytest -xvs tests/test_proxy_http_pipe.py
+tests/test_proxy_http_pipe.py::test_startup_hook_skips_when_no_env PASSED
+tests/test_proxy_http_pipe.py::test_startup_hook_assigns_pipe_when_env PASSED
+======================== 2 passed in 0.62s ========================
+
+$ PYTHONPATH=src python -m pytest -xvs tests/
+======================== 6 passed in 1.68s ========================
+```
+
+**M1 total 6/6 PASS in real env**: H015 echo 4 + H031 lifespan 2.
+
+## Physical Verification (H030.bis Step 4-5)
+
+After `cp adapter`-free flow (no further restart needed), planner started:
+
+- M1 sidecar with `MCP_ENDPOINT=ws://10.206.218.66:8004/mcp_endpoint/mcp/?token=...%3D`
+  on port 8650
+- direct curl smoke `POST /tools/show_text`:
+  ```
+  HTTP 200 OK
+  {"ok":true,"echo":{"jsonrpc":"2.0","method":"initialize",...}}
+  ```
+- HMAC-signed end-to-end smoke through hermes plugin webhook (8645):
+  - Hermes session spawned, DeepSeek 9.1s/42 chars, adapter.send → sidecar
+  - **sidecar log: `POST /tools/show_text 200 OK` (×4)** instead of H030's 500
+
+**Bitter lesson #26 (retro)**: codex `starlette.testclient.TestClient`
+lifespan hangs in sandbox (same pattern as #18 socket bind). Real env runs
+clean. Future handoffs using TestClient should add the planner-main-loop
+fallback clause to Constraints.
+
+## What I Did (planner unblock)
+
+- Validated codex's 3 file edits (proxy_http.py / pipe.py / show_text_proxy.py)
+  + 1 new test file (test_proxy_http_pipe.py) work in real env.
+- Ran full M1 suite: **6/6 PASS in 1.68s**.
+- Physically verified by starting sidecar with real MCP_ENDPOINT and observing
+  pipe.connect handshake + 4× sidecar 200 OK after H030 HMAC POST chain.
+
+## Bitter Lessons (for H027 retro batch)
+
+- **#26**: codex `TestClient` lifespan hangs in sandbox (Bitter lesson #18 pattern: codex sandbox network/io limits ⇒ planner-main-loop unblock).

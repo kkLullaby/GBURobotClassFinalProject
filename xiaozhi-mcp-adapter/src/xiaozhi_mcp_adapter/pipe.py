@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import queue
 import random
 import signal
 import subprocess
@@ -18,6 +19,80 @@ MAX_BACKOFF_SECONDS = 600.0
 
 class StopRequested(Exception):
     """Raised when SIGINT/SIGTERM asks the pipe to stop."""
+
+
+class _PipeStdin:
+    def __init__(self, pipe: "WebSocketPipe"):
+        self._pipe = pipe
+        self._buffer = ""
+
+    def write(self, text: str) -> None:
+        self._buffer += text
+
+    def flush(self) -> None:
+        if not self._buffer:
+            return
+        message = self._buffer
+        self._buffer = ""
+        if message.endswith("\n"):
+            message = message[:-1]
+        self._pipe.send_nowait(message)
+
+
+class _PipeStdout:
+    def __init__(self, incoming: "queue.Queue[str]"):
+        self._incoming = incoming
+
+    def readline(self) -> str:
+        return self._incoming.get()
+
+
+class WebSocketPipe:
+    """Small stdin/stdout facade over the mcp_endpoint WebSocket."""
+
+    def __init__(self, websocket):
+        self._websocket = websocket
+        self._loop = asyncio.get_running_loop()
+        self._incoming: "queue.Queue[str]" = queue.Queue()
+        self.stdin = _PipeStdin(self)
+        self.stdout = _PipeStdout(self._incoming)
+        self._receiver_task = asyncio.create_task(self._receive_loop())
+
+    async def _receive_loop(self) -> None:
+        try:
+            async for message in self._websocket:
+                if isinstance(message, bytes):
+                    message = message.decode()
+                self._incoming.put(str(message).rstrip("\n") + "\n")
+        finally:
+            self._incoming.put("")
+
+    async def _send(self, message: str) -> None:
+        await self._websocket.send(message)
+
+    def send_nowait(self, message: str) -> None:
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run_coroutine_threadsafe(self._send(message), self._loop)
+            return
+
+        if running_loop is self._loop:
+            asyncio.create_task(self._send(message))
+        else:
+            asyncio.run_coroutine_threadsafe(self._send(message), self._loop)
+
+    async def close(self) -> None:
+        self._receiver_task.cancel()
+        await self._websocket.close()
+        await asyncio.gather(self._receiver_task, return_exceptions=True)
+        self._incoming.put("")
+
+
+async def connect(uri: str) -> WebSocketPipe:
+    websocket = await websockets.connect(uri)
+    LOG.info("connected to MCP endpoint: %s", uri)
+    return WebSocketPipe(websocket)
 
 
 def _default_child_command() -> List[str]:

@@ -10,6 +10,7 @@ from typing import Any, Dict
 
 MAX_TEXT_CHARS = 30
 ALLOWED_KINDS = {"notification", "chat"}
+_PIPE = None
 
 
 def _normalize_text(text: str) -> str:
