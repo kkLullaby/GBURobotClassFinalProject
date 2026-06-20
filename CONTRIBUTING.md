@@ -2,7 +2,7 @@
 
 > 中文 | [English](#english)
 
-欢迎为 **xiaozhi-robot** 做出贡献！本项目把 ESP32-S3 OttoRobot 变成了
+欢迎为 **ottagent** 做出贡献！本项目把 ESP32-S3 OttoRobot 变成了
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的第一具
 物理化身，欢迎以下几种贡献方式。
 
@@ -28,8 +28,8 @@
 
 ```bash
 # 1. Fork + clone
-git clone --recurse-submodules https://github.com/<你的 fork>/GBURobotClassFinalProject.git
-cd GBURobotClassFinalProject
+git clone --recurse-submodules https://github.com/<你的 fork>/ottagent.git
+cd ottagent
 
 # 2. 创建特性分支
 git checkout -b feat/lark-channel
@@ -81,7 +81,7 @@ git push origin feat/lark-channel
 
 ## English
 
-Welcome contributing to **xiaozhi-robot** — making ESP32-S3 OttoRobot
+Welcome contributing to **ottagent** — making ESP32-S3 OttoRobot
 the first physical embodiment of [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
 ### How to contribute

@@ -1,4 +1,4 @@
-# Project: xiaozhi-robot (GBU 期末作业)
+# Project: ottagent (GBU 期末作业)
 
 > 本项目采纳多角色 agent 协作架构。完整规范见
 > [agent-loop-evolution-spec](https://github.com/kkLullaby/Multi-agent_collaboration_workflow_design_specifications)（本地路径 `/home/kk/code/project/Multi-agent_collaboration_workflow_design_specifications/`）。

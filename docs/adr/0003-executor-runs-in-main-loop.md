@@ -67,7 +67,7 @@ executor 启动 Claude**。
 
 ### Coverage scope
 
-本决定**只覆盖本项目（xiaozhi-robot / GBU 期末作业）**。是否回流 spec
+本决定**只覆盖本项目（ottagent / GBU 期末作业）**。是否回流 spec
 仓库视后续多个 spec 用户项目是否复现而定（按 spec ADR-0002 #"复发性
 bitter lesson 必须连同最初触发场景一起记录"原则，本 ADR 的 Context
 段已记录最初触发场景）。

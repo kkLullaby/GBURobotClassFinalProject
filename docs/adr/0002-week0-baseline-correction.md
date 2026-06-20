@@ -30,7 +30,7 @@ Week 0 启动时，planner 对实测环境做了一次基线探测，发现 3 �
   - `git submodule status` 返回 `fatal: 在 .gitmodules 中没有发现路径
     'esp/xiaozhi-esp32' 的子模组映射`
   - `esp/xiaozhi-esp32/` 是一个**嵌套 git 工作树**（自带 `.git`），
-    `origin = kkLullaby/GBURobotClassFinalProject.git`，
+    `origin = kkLullaby/ottagent.git`，
     `upstream = 78/xiaozhi-esp32.git`，当前 HEAD = `b392c63`（上游 main）
   - `esp/esp-idf/` 在 git index 里被标记 `D`（已从主仓库 index 删除），
     但目录还在磁盘上（是 ESP-IDF 5.3.2，**不是** roadmap 要求的 5.5.2）

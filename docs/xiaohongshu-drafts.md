@@ -55,7 +55,7 @@
 - 给 hermes 装更多 tool (订机票, 查日历, 写代码)
 - 让多台机器人 mesh 联动
 
-源码: github.com/kkLullaby/GBURobotClassFinalProject
+源码: github.com/kkLullaby/ottagent
 欢迎 fork ⭐ + 提 PR
 
 📚 这是我们大湾大今年的机器人课期末作业.

@@ -1,4 +1,4 @@
-# Bootstrap Manual — xiaozhi-robot
+# Bootstrap Manual — ottagent
 
 > 三角色 agent 协作的启动手册。
 > 架构决策见 [docs/adr/0001-adopt-agent-arch.md](docs/adr/0001-adopt-agent-arch.md)。

@@ -1,6 +1,6 @@
 ---
 id: 0001
-title: Adopt agent-loop-evolution-spec three-role architecture for xiaozhi-robot
+title: Adopt agent-loop-evolution-spec three-role architecture for ottagent
 status: active
 created: 2026-06-16
 author: user

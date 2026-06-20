@@ -5,7 +5,7 @@ author: planner
 period: Week 0 (2026-06-16 → 2026-06-19, ~3-4 day calendar)
 ---
 
-# Week 0 Retro — xiaozhi-robot
+# Week 0 Retro — ottagent
 
 > 写于 H026。**目的**：沉淀 Week 0 的实践 + 抽方法论 + 收纳 bitter
 > lesson，给 Week 1-4 用，也给上游 (Hermes / xinnan-tech) PR 时附素材。

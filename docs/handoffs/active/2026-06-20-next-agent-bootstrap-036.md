@@ -13,9 +13,9 @@ artifacts:
 
 ## Read me first (开机即读)
 
-你是接手 **xiaozhi-robot** 项目的下一个 agent. 项目当前状态:
+你是接手 **ottagent** 项目的下一个 agent. 项目当前状态:
 
-- **答辩已结束**, 已上传 GitHub public repo: `kkLullaby/GBURobotClassFinalProject`
+- **答辩已结束**, 已上传 GitHub public repo: `kkLullaby/ottagent`
 - 架构闭环 (M1-M4 + H033 + H035): voice → ESP32 → docker → shim
   → (hybrid router) → DeepSeek + tools | hermes-z + tool-call
 - 真物理验证: 舵机能动 + voice 真指挥 hermes 调本机工具

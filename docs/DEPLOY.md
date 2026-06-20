@@ -83,8 +83,8 @@ echo "alias get_idf552='source ~/esp-idf-5.5.2/export.sh'" >> ~/.bashrc
 ## Part 2 — 克隆本项目
 
 ```bash
-git clone --recurse-submodules https://github.com/kkLullaby/GBURobotClassFinalProject.git
-cd GBURobotClassFinalProject
+git clone --recurse-submodules https://github.com/kkLullaby/ottagent.git
+cd ottagent
 
 # 验 submodule 拉到了
 ls esp/xiaozhi-esp32/main/  # 应该有内容

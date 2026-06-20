@@ -1,4 +1,4 @@
-# xiaozhi-robot
+# ottagent
 
 > **把开源 AI Agent 装进 ESP32 桌面机器人 — voice → tool-call → 真做事 (舵机真动, 喇叭真说)**
 >
@@ -35,7 +35,7 @@
 
 ## 🎯 创新点 (在拓扑, 不在硬件)
 
-| | 智能音箱 (小爱 / 天猫) | xiaozhi-robot |
+| | 智能音箱 (小爱 / 天猫) | ottagent |
 |---|---|---|
 | 后端 | 厂商私有, 锁死 | OpenAI 兼容, 可换 (DeepSeek/Claude/Ollama/Nous Portal) |
 | 协议 | 私有 ws/RPC | 标准 OpenAI Chat + MCP + Hermes channel ABI |
@@ -76,8 +76,8 @@ ESP32-S3 OttoRobot ←─── WiFi ───→ xinnan-tech docker server (STT
 
 ```bash
 # 1. Clone (含 submodule)
-git clone --recurse-submodules https://github.com/kkLullaby/GBURobotClassFinalProject.git
-cd GBURobotClassFinalProject
+git clone --recurse-submodules https://github.com/kkLullaby/ottagent.git
+cd ottagent
 
 # 2. 起 docker (xinnan-tech 后端 — 自己 clone + 配 LLM key)
 #   见 docs/DEPLOY.md Part 3
@@ -192,7 +192,7 @@ tail -f ~/.hermes/logs/agent.log
 
 ## English
 
-**xiaozhi-robot** — embedding open-source AI Agent into an ESP32-S3 desktop robot.
+**ottagent** — embedding open-source AI Agent into an ESP32-S3 desktop robot.
 
 ### One-liner
 
@@ -206,7 +206,7 @@ Make the ESP32-S3 OttoRobot the first **physical embodiment** of [Hermes Agent](
 
 ### Innovation (in topology, not hardware)
 
-| | Smart speaker (Alexa-like) | xiaozhi-robot |
+| | Smart speaker (Alexa-like) | ottagent |
 |---|---|---|
 | Backend | Vendor-locked | OpenAI-compatible, swappable |
 | Protocol | Proprietary RPC | Standard MCP + Hermes channel ABI |
